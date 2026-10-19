@@ -12,7 +12,9 @@ import { scanHidDevices, toHex } from '../src/main/hid/enumerate'
 
 const args = new Set(process.argv.slice(2))
 const jsonOnly = args.has('--json')
-const skipCompx = args.has('--skip-compx')
+// CompX 探针是真的往设备发帧（cmd 1 还带 4 字节随机数，像握手/配对），所以默认不发，
+// 要发必须显式加 --compx。其余动作只有 getFeatureReport，属于读取。
+const runCompx = args.has('--compx')
 const skipFeatures = args.has('--skip-features')
 
 function describeKind(usagePage: number | null, usage: number | null, kind: string): string {
@@ -77,7 +79,7 @@ function probeCandidate(group: HidDeviceGroup): HidInterfaceProbe[] {
       usageHex: `0x${toHex(item.usage ?? 0)}`
     }
 
-    if (!skipCompx && isCompxEndpoint(item)) {
+    if (runCompx && isCompxEndpoint(item)) {
       probe.compx = probeCompx(item.path)
     }
 
@@ -134,6 +136,10 @@ function main(): void {
   if (!jsonOnly) {
     console.log(
       `HID interfaces: ${scan.interfaces.length}, device groups: ${scan.groups.length}, wireless receiver candidates: ${candidates.length}`
+    )
+    // 把这行打在结果里，好让"到底发没发帧"这件事被输出证明，而不是靠读代码猜
+    console.log(
+      `CompX write probe: ${runCompx ? 'ENABLED (frames were sent)' : 'disabled (read-only; pass --compx to send)'}`
     )
     console.log('')
 
