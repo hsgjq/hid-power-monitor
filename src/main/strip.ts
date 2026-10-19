@@ -164,6 +164,27 @@ export function resizeStrip(width: number, height: number): void {
   setStripBounds(bounds.x, bounds.y, nextWidth, nextHeight)
 }
 
+/*
+ * 换分辨率、插拔外接屏之后要把浮条重新夹回工作区：记住的坐标是在另一块屏上算出来的，
+ * 拓扑一变就可能落到已经不存在的区域，表现就是浮条"消失了"。拖动过程中不能插手，
+ * 否则会把用户正在拖的那一帧顶回去。
+ */
+let displayWatchArmed = false
+
+function reclampAfterDisplayChange(): void {
+  if (!strip || strip.isDestroyed() || dragOffset) return
+  const bounds = strip.getBounds()
+  setStripBounds(bounds.x, bounds.y, bounds.width, bounds.height)
+}
+
+export function watchDisplays(): void {
+  if (displayWatchArmed) return
+  displayWatchArmed = true
+  screen.on('display-added', reclampAfterDisplayChange)
+  screen.on('display-removed', reclampAfterDisplayChange)
+  screen.on('display-metrics-changed', reclampAfterDisplayChange)
+}
+
 export function destroyStrip(): void {
   dragOffset = null
   strip?.destroy()

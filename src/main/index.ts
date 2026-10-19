@@ -7,7 +7,8 @@ import {
   endStripDrag,
   moveStripDrag,
   resizeStrip,
-  syncStrip
+  syncStrip,
+  watchDisplays
 } from './strip'
 import { applySnapshotToTray, createTray } from './tray'
 import { checkLowBattery } from './notify'
@@ -116,6 +117,7 @@ app.whenReady().then(() => {
 
   syncLoginItem()
   applyStrip(loadSettings())
+  watchDisplays()
 
   // 开发态渲染层是 http 地址，直接在浏览器打开会没有设备读数，所以启动后自动弹一次面板
   if (!app.isPackaged && !process.argv.includes('--hidden')) {
