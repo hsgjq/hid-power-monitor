@@ -1,0 +1,16 @@
+# 仓库里有打包用的二进制资源，明确关掉换行转换：autocrlf 会在签出时往二进制里注入 CR
+*.ico binary
+*.png binary
+*.node binary
+*.exe binary
+*.pdf binary
+
+# 文本类统一按 LF 入库
+*.ts text eol=lf
+*.vue text eol=lf
+*.css text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.md text eol=lf

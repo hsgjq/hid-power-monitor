@@ -1,0 +1,55 @@
+# 打包配置：nsis 只装给当前用户（不弹 UAC），开机自启那条注册表项才指得到装好的 exe。
+# 刻意没设 productName：Electron 的 userData 目录名取的是 package.json 的 name，
+# 一改，%APPDATA%\hid-power-monitor\settings.json 里已经存的阈值、浮条位置和颜色就读不到了。
+# 也没配 portable 目标：免安装的 exe 会把自己解压到临时目录，开机自启写进去就是又一条坏路径。
+appId: com.hidpowermonitor.tray
+# 不发布更新通道。留着默认值的话 electron-builder 会生成 latest.yml、blockmap 和包内的
+# app-update.yml，自动更新框架会去一个不存在的地址找更新，纯粹是误导
+publish: null
+# 直接用 node_modules/electron/dist 这份已经解好的运行时。原因不是省流量：
+# 让 electron-builder 自己下载并解压时，刚写出的 resources/default_app.asar 会被本机
+# 杀软/索引句柄握住，那一步 win-unpacked.tmp 改名每次都 EPERM（换输出目录也一样，试了两次）
+# 同样的锁也会发生在输出目录落在工作区里的时候，那种情况构建请指到工作区外：
+#   npx electron-builder --win -c.directories.output=%LOCALAPPDATA%\Temp\hpm-pack
+electronDist: node_modules/electron/dist
+directories:
+  output: dist
+  buildResources: build
+# files 用白名单而不是黑名单：默认会把工作区里所有东西都收进来，上次一次失败的解压留下的
+# pack/ 就是这么跟着进了包。只声明运行真正需要的三样，剩下的杂散目录搭不上车。
+files:
+  - 'out/**'
+  - 'package.json'
+  - 'node_modules/**'
+  - '!node_modules/node-hid/src/**'
+  - '!node_modules/node-hid/hidapi/**'
+  - '!node_modules/node-hid/prebuilds/HID-darwin*/**'
+  - '!node_modules/node-hid/prebuilds/HID-linux*/**'
+  - '!node_modules/node-hid/prebuilds/HID_hidraw-*/**'
+  - '!node_modules/node-hid/prebuilds/HID-win32-ia32/**'
+  - '!node_modules/node-hid/prebuilds/HID-win32-arm64/**'
+# node-hid 的原生 .node 不能从 asar 里加载，必须解出来放进 app.asar.unpacked
+asarUnpack:
+  - node_modules/node-hid/**
+# 用的就是 prebuilds 里的 N-API 二进制，不需要针对 Electron 的 ABI 重新编译
+npmRebuild: false
+# 只留中英文界面字符串。实测 locales/ 是 48.30 MB / 55 个 .pak，全装上带的全是
+# 马拉雅拉姆、泰卢固这类本应用不可能出现的语言，纯 Chromium 自带
+electronLanguages:
+  - zh-CN
+  - en-US
+# 顶层字段，不是 nsis 下的（放错层会被 schema 直接拒掉）。最大一档压缩，代价是打包多花十几秒
+compression: maximum
+win:
+  icon: build/icon.ico
+  target:
+    - nsis
+  requestedExecutionLevel: asInvoker
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: HID 电量托盘
+  artifactName: '${name}-setup-${version}.${ext}'
