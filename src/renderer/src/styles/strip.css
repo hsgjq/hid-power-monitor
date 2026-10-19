@@ -1,0 +1,70 @@
+/* 桌面浮条 */
+
+/* 浮条窗口按内容尺寸开，四边只留 4px 给阴影；弹层那 10px 边距不适用于它 */
+html[data-view='strip'] #app {
+  padding: 4px;
+}
+
+.strip {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  height: 26px;
+  padding: 0 11px;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 7px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+  /* 整条可拖；它不响应点击，所以不需要给内部留 no-drag 区域 */
+  -webkit-app-region: drag;
+}
+
+.strip__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-muted);
+}
+
+/*
+ * --strip-text 由用户设置注入（StripView 写在 documentElement 上）。
+ * 只影响正常读数的颜色：低电、充电、无读数仍走状态色，
+ * 否则一个自定义颜色会把"该提醒的异常"抹平。
+ */
+.strip__value {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--strip-text, var(--text));
+}
+
+.strip__unit {
+  margin-left: 1px;
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.strip__item[data-tone='charge'] {
+  color: var(--fill-charge);
+}
+
+.strip__item[data-tone='charge'] .strip__value {
+  color: var(--fill-charge);
+}
+
+.strip__item[data-tone='low'] {
+  color: var(--fill-low-text);
+}
+
+.strip__item[data-tone='low'] .strip__value {
+  color: var(--fill-low-text);
+}
+
+.strip__item[data-tone='unknown'] .strip__value {
+  color: var(--text-faint);
+}
+
+/* 沿用上一次读数时压暗，跟弹层里同一套语义 */
+.strip__item[data-stale='true'] .strip__value {
+  color: var(--text-muted);
+}

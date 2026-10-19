@@ -1,0 +1,13 @@
+:root {
+  --panel: #1f2328;
+  --panel-edge: rgba(255, 255, 255, 0.1);
+  --hairline: rgba(255, 255, 255, 0.07);
+  --text: #e8eaed;
+  --text-muted: #98a1ab;
+  --text-faint: #848d96;
+  --track: rgba(255, 255, 255, 0.38);
+  --fill: #dfe3e8;
+  --fill-low: #e06d63;
+  --fill-low-text: #f2a79f;
+  --fill-charge: #6ed39a;
+}

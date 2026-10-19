@@ -1,6 +1,19 @@
 import { createApp } from 'vue'
 import App from './App.vue'
-// 全站样式只这一份，组件里不再各自 scoped，避免同一套色值散在多处改不全
-import './assets/main.css'
+import StripView from './StripView.vue'
+// 按块分文件：变量 → 基础 → 弹层外壳 → 设备行 → 设置 → 浮条（顺序即层叠优先级）
+import './styles/tokens.css'
+import './styles/base.css'
+import './styles/panel.css'
+import './styles/device.css'
+import './styles/settings.css'
+import './styles/strip.css'
 
-createApp(App).mount('#app')
+/*
+ * 一个 HTML 入口挂两个视图：托盘弹层和桌面浮条。
+ * 浮条是主进程用 `#strip` 这个 hash 打开的同一个文件，省掉第二套构建配置。
+ */
+const isStrip = window.location.hash === '#strip'
+if (isStrip) document.documentElement.dataset.view = 'strip'
+
+createApp(isStrip ? StripView : App).mount('#app')

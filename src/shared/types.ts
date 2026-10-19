@@ -96,10 +96,18 @@ export interface PowerSnapshot {
   devices: PowerDeviceReading[]
 }
 
+export interface StripPosition {
+  x: number
+  y: number
+}
+
 export interface AppSettings {
   autoLaunch: boolean
   lowBatteryPercent: number
   soundAlert: boolean
+  stripVisible: boolean
+  stripPosition: StripPosition | null
+  stripTextColor: string | null
 }
 
 export interface LowBatteryAlert {
@@ -108,15 +116,45 @@ export interface LowBatteryAlert {
   percent: number
 }
 
+export interface HidCollectionSummary {
+  usagePage: string
+  usage: string
+  kind: HidKind
+}
+
+export interface HidDiagnosticsGroup {
+  id: string
+  manufacturer: string | null
+  product: string | null
+  interfaceCount: number
+  shown: boolean
+  reason: string
+  collections: HidCollectionSummary[]
+}
+
+export interface HidDiagnostics {
+  generatedAt: string
+  groups: HidDiagnosticsGroup[]
+}
+
+export interface RuntimeFlags {
+  loginItemSupported: boolean
+}
+
 export interface PowerBridge {
   getSnapshot(): Promise<PowerSnapshot>
   refresh(): void
   hide(): void
   quit(): void
   resize(height: number): void
+  resizeStrip(width: number, height: number): void
   getSettings(): Promise<AppSettings>
+  getRuntimeFlags(): Promise<RuntimeFlags>
   saveSettings(patch: Partial<AppSettings>): Promise<AppSettings>
+  getDiagnostics(): Promise<HidDiagnostics>
+  copyText(text: string): void
   onSnapshot(handler: (snapshot: PowerSnapshot) => void): () => void
+  onSettings(handler: (settings: AppSettings) => void): () => void
   onAlert(handler: (alert: LowBatteryAlert) => void): () => void
 }
 

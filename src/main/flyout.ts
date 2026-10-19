@@ -12,6 +12,9 @@ const PANEL_WIDTH = 340
 const PANEL_HEIGHT = 274
 const EDGE_GAP = 8
 
+// 上一次摆放时面板的下边界，供内容变高时保持底边不动
+let anchorBottom = 0
+
 export function createFlyoutWindow(options: { hideOnBlur: boolean }): BrowserWindow {
   const win = new BrowserWindow({
     width: PANEL_WIDTH,
@@ -66,7 +69,25 @@ export function showFlyout(win: BrowserWindow, trayPoint: { x: number; y: number
   const x = Math.min(Math.max(rawX, area.x + EDGE_GAP), area.x + area.width - PANEL_WIDTH - EDGE_GAP)
   const y = area.y + area.height - PANEL_HEIGHT - EDGE_GAP
 
-  win.setPosition(Math.round(x), Math.round(y), false)
+  anchorBottom = y + PANEL_HEIGHT
+  win.setBounds({ x: Math.round(x), y: Math.round(y), width: PANEL_WIDTH, height: PANEL_HEIGHT }, false)
   win.show()
   win.focus()
+}
+
+/*
+ * 渲染层量完内容高度后回传。窗口必须保持底边不动往上长：它是贴着任务栏摆放的，
+ * 若按默认的左上角锚定，展开诊断清单（实测自然高度 538）会把面板推到屏幕外去。
+ */
+export function resizeFlyout(win: BrowserWindow, height: number): void {
+  const bounds = win.getBounds()
+  const area = screen.getDisplayNearestPoint(
+    { x: bounds.x + bounds.width / 2, y: bounds.y },
+  ).workArea
+  const nextHeight = Math.min(Math.round(height), area.height - EDGE_GAP * 2)
+  const bottom = anchorBottom || bounds.y + bounds.height
+  let y = bottom - nextHeight
+  if (y < area.y + EDGE_GAP) y = area.y + EDGE_GAP
+
+  win.setBounds({ x: bounds.x, y: Math.round(y), width: bounds.width, height: nextHeight }, false)
 }

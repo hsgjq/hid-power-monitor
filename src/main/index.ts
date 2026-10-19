@@ -1,10 +1,12 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
-import { createFlyoutWindow, showFlyout } from './flyout'
+import { app, BrowserWindow, clipboard, ipcMain } from 'electron'
+import { createFlyoutWindow, resizeFlyout, showFlyout } from './flyout'
+import { buildDiagnostics } from './hid/diagnostics'
+import { destroyStrip, resizeStrip, syncStrip } from './strip'
 import { applySnapshotToTray, createTray } from './tray'
 import { checkLowBattery } from './notify'
 import { loadSettings, saveSettings, syncLoginItem } from './settings'
 import { onSnapshot, pushSnapshot, startPolling, stopPolling } from './power/service'
-import type { AppSettings, PowerSnapshot } from '../shared/types'
+import type { AppSettings, PowerSnapshot, StripPosition } from '../shared/types'
 
 /*
  * 主进程入口：单实例 + 托盘 + 弹层 + 轮询。
@@ -30,6 +32,16 @@ function toggleFlyout(point: { x: number; y: number }): void {
   showFlyout(flyout, point)
 }
 
+function applyStrip(settings: AppSettings): void {
+  syncStrip({
+    visible: settings.stripVisible,
+    position: settings.stripPosition,
+    onMoved: (position: StripPosition) => {
+      saveSettings({ stripPosition: position })
+    }
+  })
+}
+
 app.whenReady().then(() => {
   app.setAppUserModelId('com.hidpowermonitor.tray')
 
@@ -46,15 +58,31 @@ app.whenReady().then(() => {
   ipcMain.on('power:refresh', () => pushSnapshot())
   ipcMain.on('flyout:hide', () => flyout?.hide())
   ipcMain.on('flyout:resize', (_event, height: number) => {
-    if (!flyout) return
-    const width = flyout.getBounds().width
-    flyout.setContentSize(width, Math.round(height), false)
+    if (!flyout || !Number.isFinite(height)) return
+    resizeFlyout(flyout, height)
   })
   ipcMain.handle('settings:get', () => loadSettings())
-  ipcMain.handle('settings:save', (_event, patch: Partial<AppSettings>) => saveSettings(patch))
+  ipcMain.handle('runtime:flags', () => ({ loginItemSupported: app.isPackaged }))
+  ipcMain.handle('settings:save', (_event, patch: Partial<AppSettings>) => {
+    const next = saveSettings(patch)
+    // 只有动到浮条相关项才重建窗口，避免每次改阈值都闪一下
+    if ('stripVisible' in patch || 'stripPosition' in patch) applyStrip(next)
+    // 弹层里改的颜色要立刻反映到已经显示着的浮条上，两边是不同窗口
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('settings:changed', next)
+    }
+    return next
+  })
+  ipcMain.handle('diagnostics:get', () => buildDiagnostics())
+  // 剪贴板走主进程：渲染层是 file:// 加载，navigator.clipboard 不一定可用
+  ipcMain.on('clipboard:write', (_event, text: string) => clipboard.writeText(String(text ?? '')))
+  ipcMain.on('strip:resize', (_event, width: number, height: number) => {
+    if (Number.isFinite(width) && Number.isFinite(height)) resizeStrip(width, height)
+  })
   ipcMain.on('app:quit', () => app.quit())
 
   syncLoginItem()
+  applyStrip(loadSettings())
 
   // 开发态渲染层是 http 地址，直接在浏览器打开会没有设备读数，所以启动后自动弹一次面板
   if (!app.isPackaged && !process.argv.includes('--hidden')) {
@@ -74,6 +102,7 @@ app.on('second-instance', () => {
 
 app.on('before-quit', () => {
   stopPolling()
+  destroyStrip()
   tray?.destroy()
   tray = null
 })

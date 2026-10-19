@@ -1,0 +1,142 @@
+/* 设备行与电池条 */
+
+.devices {
+  display: flex;
+  flex-direction: column;
+  padding: 0 10px;
+  list-style: none;
+}
+
+.device {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: center;
+  padding: 11px 6px;
+}
+
+.device + .device {
+  border-top: 1px solid var(--hairline);
+}
+
+.device__glyph {
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.device__name {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.device__meta {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.device__readout {
+  text-align: right;
+}
+
+.device__value {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 4px;
+  font-size: 20px;
+  letter-spacing: -0.2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.device__value small {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.device__bolt {
+  color: var(--fill-charge);
+}
+
+.device__battery {
+  margin-top: 6px;
+}
+
+/* 读数过期与"未识别"共用一套暗色，跟状态色互不冲突 */
+.device[data-state='unsupported'] .device__value,
+.device[data-stale='true'] .device__value {
+  color: var(--text-muted);
+}
+
+.device[data-state='absent'],
+.device[data-state='absent'] .device__glyph,
+.device[data-state='absent'] .device__value,
+.device[data-state='absent'] .device__meta {
+  color: var(--text-faint);
+}
+
+.device[data-state='low'] .device__value {
+  color: var(--fill-low-text);
+}
+
+.battery {
+  position: relative;
+  display: inline-block;
+  width: 58px;
+  height: 9px;
+  border: 1px solid var(--track);
+  border-radius: 3px;
+}
+
+.battery::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: -4px;
+  width: 3px;
+  height: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--track);
+}
+
+.battery__fill {
+  position: absolute;
+  inset: 1px;
+  border-radius: 2px;
+  background: var(--fill);
+  transition: width 300ms ease;
+}
+
+.battery[data-tone='low'] {
+  border-color: rgba(224, 109, 99, 0.55);
+}
+
+.battery[data-tone='low'] .battery__fill {
+  background: var(--fill-low);
+}
+
+.battery[data-tone='charge'] {
+  border-color: rgba(110, 211, 154, 0.5);
+}
+
+.battery[data-tone='charge'] .battery__fill {
+  background: var(--fill-charge);
+}
+
+.battery[data-stale='true'] .battery__fill {
+  opacity: 0.45;
+}
+
+.battery[data-tone='unknown'] {
+  border-style: dashed;
+}
+
+.battery[data-tone='unknown'] .battery__fill {
+  display: none;
+}

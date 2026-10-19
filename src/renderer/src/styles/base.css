@@ -1,0 +1,26 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  background: transparent;
+  color: var(--text);
+  font-family: 'Microsoft YaHei UI', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+  overflow: hidden;
+  user-select: none;
+}
+
+#app {
+  padding: 10px;
+}
