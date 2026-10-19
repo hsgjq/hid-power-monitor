@@ -119,15 +119,8 @@ app.whenReady().then(() => {
   applyStrip(loadSettings())
   watchDisplays()
 
-  // 开发态渲染层是 http 地址，直接在浏览器打开会没有设备读数，所以启动后自动弹一次面板
-  if (!app.isPackaged && !process.argv.includes('--hidden')) {
-    flyout.webContents.once('did-finish-load', () => {
-      if (!tray || !flyout) return
-      const bounds = tray.getBounds()
-      showFlyout(flyout, { x: bounds.x + bounds.width / 2, y: bounds.y })
-    })
-  }
-
+  // 启动时什么都不弹：面板只由点托盘图标或点通知唤起。开了浮条的话上面
+  // applyStrip 已经把浮条显示出来了，那就是启动后唯一可见的东西
   startPolling()
 })
 

@@ -117,7 +117,7 @@ src/
 
 ```cmd
 pnpm install
-pnpm dev          :: 托盘图标起来，开发态会自动弹出面板一次
+pnpm dev          :: 只起托盘，面板要你点图标才弹；开了浮条的话启动后就只有浮条
 pnpm typecheck    :: 主进程用 tsc、渲染层用 vue-tsc 各查一遍
 pnpm build        :: electron-vite 三层打包到 out/
 ```
