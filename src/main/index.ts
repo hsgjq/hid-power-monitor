@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, ipcMain, screen } from 'electron'
+import { app, BrowserWindow, clipboard, ipcMain, powerMonitor, screen } from 'electron'
 import { createFlyoutWindow, resizeFlyout, showFlyout } from './flyout'
 import { buildDiagnostics } from './hid/diagnostics'
 import {
@@ -6,6 +6,7 @@ import {
   destroyStrip,
   endStripDrag,
   moveStripDrag,
+  refreshStripAfterUnlock,
   resizeStrip,
   syncStrip,
   watchDisplays
@@ -118,6 +119,11 @@ app.whenReady().then(() => {
   syncLoginItem()
   applyStrip(loadSettings())
   watchDisplays()
+
+  // 锁屏会切换显示模式，回来之后这张窗的命中区与可见像素会错位（点得到窗口但收不到 DOM 事件），
+  // 所以解锁和唤醒时原地重建一次浮条
+  powerMonitor.on('unlock-screen', refreshStripAfterUnlock)
+  powerMonitor.on('resume', refreshStripAfterUnlock)
 
   // 启动时什么都不弹：面板只由点托盘图标或点通知唤起。开了浮条的话上面
   // applyStrip 已经把浮条显示出来了，那就是启动后唯一可见的东西

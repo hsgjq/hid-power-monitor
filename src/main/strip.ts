@@ -1,4 +1,5 @@
-import { BrowserWindow, screen } from 'electron'
+import { app, BrowserWindow, screen } from 'electron'
+import { appendFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { StripPosition } from '../shared/types'
 
@@ -11,7 +12,7 @@ import type { StripPosition } from '../shared/types'
  *
  * 拖动不用 `-webkit-app-region: drag`：那种拖动依赖窗口能被激活，而 focusable:false
  * 的窗口在别的程序成为前台之后就拖不动了。也不用主进程定时轮询光标——Windows 定时器
- * 粒度会让手感发顿。现在是渲染层把 pointermove 的屏幕坐标按帧交给主进程摆放，事件驱动。
+ * 粒度会让手感发顿。现在是渲染层把 pointermove 的屏幕坐标按时间间隔交给主进程摆放。
  */
 
 const STRIP_WIDTH = 176
@@ -48,6 +49,7 @@ function clampToArea(x: number, y: number, width: number, height: number): Strip
 function setStripBounds(x: number, y: number, width: number, height: number): void {
   if (!strip || strip.isDestroyed()) return
   const clamped = clampToArea(x, y, width, height)
+  if (clamped.x !== x || clamped.y !== y) clampedCount += 1
   applyingBounds = true
   strip.setBounds({ ...clamped, width, height }, false)
   applyingBounds = false
@@ -61,29 +63,73 @@ function persistPosition(): void {
 
 let movedHandler: ((position: StripPosition) => void) | null = null
 
+/*
+ * 只在未打包时记一条拖动会话日志（userData/drag.log），用来分辨锁屏解锁后到底是哪一环断的：
+ * 渲染层没把 pointerdown 送过来 → 文件里连 drag-begin 都没有；
+ * 送过来了但主进程没有偏移量 → 会看到 drag-move-dropped；
+ * 两边都正常却摆不动 → 看 applied 和 bounds 是否一致。
+ * 每次拖动只写一行，不是每条鼠标事件都写。
+ */
+let moves = 0
+let dropped = 0
+let clampedCount = 0
+let loggedDrop = false
+
+function dragLog(line: string): void {
+  if (app.isPackaged) return
+  try {
+    appendFileSync(join(app.getPath('userData'), 'drag.log'), `${new Date().toISOString()} ${line}\n`, 'utf8')
+  } catch {
+    // 日志写不进不影响功能
+  }
+}
+
 export function beginStripDrag(cursor: StripPosition): void {
   if (!strip || strip.isDestroyed()) return
   const [x, y] = strip.getPosition()
   dragOffset = { x: cursor.x - x, y: cursor.y - y }
+  moves = 0
+  dropped = 0
+  clampedCount = 0
+  loggedDrop = false
+  dragLog(`begin cursor=(${cursor.x},${cursor.y}) pos=(${x},${y})`)
 }
 
 export function moveStripDrag(cursor: StripPosition): void {
-  if (!strip || strip.isDestroyed() || !dragOffset) return
+  if (!strip || strip.isDestroyed()) return
+  if (!dragOffset) {
+    dropped += 1
+    if (!loggedDrop) {
+      loggedDrop = true
+      dragLog(`drag-move-dropped cursor=(${cursor.x},${cursor.y}) 没有按下时的偏移量`)
+    }
+    return
+  }
+  moves += 1
   const { width, height } = strip.getBounds()
   setStripBounds(cursor.x - dragOffset.x, cursor.y - dragOffset.y, width, height)
 }
 
 export function endStripDrag(): void {
+  const bounds = strip && !strip.isDestroyed() ? strip.getBounds() : null
+  dragLog(`end moves=${moves} dropped=${dropped} clamped=${clampedCount} bounds=${bounds ? `(${bounds.x},${bounds.y})` : 'gone'}`)
   dragOffset = null
   persistPosition()
 }
 
-export function syncStrip(options: {
+interface SyncOptions {
   visible: boolean
   position: StripPosition | null
   onMoved: (position: StripPosition) => void
-}): void {
+}
+
+// 留着这份参数，解锁重建时才能力求"原地重建"：销毁旧窗后用同一份可见性与坐标再开一张
+let lastSync: SyncOptions | null = null
+let lastRefreshAt = 0
+
+export function syncStrip(options: SyncOptions): void {
   movedHandler = options.onMoved
+  lastSync = options
 
   if (!options.visible) {
     dragOffset = null
@@ -135,6 +181,17 @@ export function syncStrip(options: {
       strip = null
     })
 
+    // 渲染进程僵死/崩掉这两件事在日志里必须留下痕迹，不然锁屏那种"界面还在但没反应"没法归因
+    strip.on('unresponsive', () => dragLog('event unresponsive'))
+    strip.on('responsive', () => dragLog('event responsive'))
+    strip.webContents.on('render-process-gone', (_event, details) =>
+      dragLog(`event render-process-gone reason=${details.reason} exit=${details.exitCode}`)
+    )
+    strip.webContents.on('did-fail-load', (_event, code, text) =>
+      dragLog(`event did-fail-load ${code} ${text}`)
+    )
+    strip.webContents.on('destroyed', () => dragLog('event web-contents-destroyed'))
+
     loadStripContent(strip)
   }
 
@@ -183,6 +240,33 @@ export function watchDisplays(): void {
   screen.on('display-added', reclampAfterDisplayChange)
   screen.on('display-removed', reclampAfterDisplayChange)
   screen.on('display-metrics-changed', reclampAfterDisplayChange)
+}
+
+/*
+ * 锁屏→解锁之后原地重建浮条。实测到的现象是：窗口还在最上层（别的窗口被它压着）、点击也
+ * 不穿透到下面的窗口、页面 JS 也活着（executeJavaScript 十几毫秒就回时间戳），但渲染层一个
+ * pointerdown 都收不到。锁屏会切换显示模式，这张窗的"屏幕坐标 → 页面元素"映射就对不上了：
+ * 系统把鼠标交给窗口，Chromium 的命中测试却算出"这里没有可交互像素"，事件被吞掉不发给 JS。
+ * 重建会把映射重新建立起来——手工把浮条开关一次能修好，就是同一个原理，代价是解锁瞬间闪一下。
+ */
+export function refreshStripAfterUnlock(): void {
+  if (!strip || strip.isDestroyed() || dragOffset || !lastSync) return
+
+  // unlock-screen 和 resume 在同一次解锁里都会来（实测两条都触发），1.5 秒内只重建一次
+  const now = Date.now()
+  if (now - lastRefreshAt < 1500) return
+  lastRefreshAt = now
+
+  const bounds = strip.getBounds()
+  dragLog(
+    `unlock visible=${strip.isVisible()} loading=${strip.webContents.isLoading()} bounds=(${bounds.x},${bounds.y},${bounds.width},${bounds.height})`
+  )
+
+  // 先记住当前坐标，销毁后按同一坐标重建，位置不会跳
+  const options = { ...lastSync, position: { x: bounds.x, y: bounds.y } }
+  dragOffset = null
+  strip.destroy()
+  syncStrip(options)
 }
 
 export function destroyStrip(): void {
