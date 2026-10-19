@@ -48,10 +48,21 @@ function readWireless(path: string): number[] | null {
   try {
     device.write(command)
     const reports: number[][] = []
-    const deadline = Date.now() + 2000
-    while (Date.now() < deadline && reports.length < 8) {
-      const report = device.readTimeout(200)
-      if (report.length > 0) reports.push(report)
+    // 收满分片就走：这些读是在主进程里同步跑的，写死等满 2 秒会让整个应用每 30 秒
+    // 卡住一次（拖动浮条时尤其明显）。帧头 [cmd, 总片数, 当前片] 里带着总片数，
+    // 所以齐了就能提前退出；设备不响应时最多也只等 900ms。
+    const deadline = Date.now() + 900
+    let expected = 0
+    let received = 0
+    while (Date.now() < deadline && (expected === 0 || received < expected)) {
+      const report = device.readTimeout(120)
+      if (report.length === 0) continue
+      const data = report[0] === WIRELESS_REPORT_ID ? report.slice(1) : report
+      if (data.length >= 3 && data[0] === WIRELESS_COMMAND) {
+        expected = data[1]
+        received += 1
+      }
+      reports.push(report)
     }
     const payload = mergeWireless(reports)
     return payload.length >= 2 ? payload : null
