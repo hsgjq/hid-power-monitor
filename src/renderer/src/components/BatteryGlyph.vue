@@ -10,12 +10,13 @@ const props = defineProps<{
   percent: number | null
   charging: boolean | null
   stale: boolean
+  lowAt: number
 }>()
 
 const tone = computed(() => {
   if (props.percent === null) return 'unknown'
   if (props.charging === true) return 'charge'
-  if (props.percent <= 20) return 'low'
+  if (props.lowAt > 0 && props.percent <= props.lowAt) return 'low'
   return 'normal'
 })
 

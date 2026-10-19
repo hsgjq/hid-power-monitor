@@ -38,7 +38,7 @@ const settingsDiag = `<ul class="settings">
     <input class="switch" type="checkbox" role="switch" aria-label="开机自启" checked />
   </li>
   <li class="setting">
-    <div><p class="setting__label">低电量提醒</p><p class="setting__hint">低于该值时弹一次系统通知</p></div>
+    <div><p class="setting__label">低电量提醒</p><p class="setting__hint">低于该值时弹通知，并把读数标红</p></div>
     <div class="stepper">
       <button class="stepper__btn" type="button">&minus;</button>
       <span class="stepper__value">15%</span>
@@ -66,7 +66,7 @@ const settingsColor = `<ul class="settings">
     <input class="switch" type="checkbox" role="switch" aria-label="开机自启" checked disabled />
   </li>
   <li class="setting">
-    <div><p class="setting__label">低电量提醒</p><p class="setting__hint">低于该值时弹一次系统通知</p></div>
+    <div><p class="setting__label">低电量提醒</p><p class="setting__hint">低于该值时弹通知，并把读数标红</p></div>
     <div class="stepper">
       <button class="stepper__btn" type="button">&minus;</button>
       <span class="stepper__value">15%</span>

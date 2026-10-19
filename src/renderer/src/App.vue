@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import type { PowerDeviceReading, PowerSnapshot } from '@shared/types'
+import type { AppSettings, PowerDeviceReading, PowerSnapshot } from '@shared/types'
 import DeviceRow from './components/DeviceRow.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import { playLowBatteryChime } from './alert-sound'
@@ -15,11 +15,13 @@ import { timeOf } from './format'
  */
 
 const snapshot = ref<PowerSnapshot | null>(null)
+const settings = ref<AppSettings | null>(null)
 const refreshing = ref(false)
 const view = ref<'devices' | 'settings'>('devices')
 const panel = ref<HTMLElement | null>(null)
 
 let unsubscribe: (() => void) | null = null
+let unsubscribeSettings: (() => void) | null = null
 let unsubscribeAlert: (() => void) | null = null
 let resetTimer: number | null = null
 let observer: ResizeObserver | null = null
@@ -27,6 +29,8 @@ let sentHeight = 0
 
 const devices = computed<PowerDeviceReading[]>(() => snapshot.value?.devices ?? [])
 const stamp = computed(() => timeOf(snapshot.value?.generatedAt ?? null))
+// 低电的分界跟着设置走，不再自己认一个 20
+const lowAt = computed(() => settings.value?.lowBatteryPercent ?? 15)
 
 function onKeydown(event: KeyboardEvent): void {
   if (event.key === 'Escape') window.power.hide()
@@ -74,7 +78,16 @@ onMounted(async () => {
     stopRefreshing()
   })
   unsubscribeAlert = window.power.onAlert(() => playLowBatteryChime())
-  snapshot.value = await window.power.getSnapshot()
+  unsubscribeSettings = window.power.onSettings((next) => {
+    settings.value = next
+  })
+  // 阈值先于读数到位，否则第一帧会按默认值画一下再改色
+  const [loadedSettings, loadedSnapshot] = await Promise.all([
+    window.power.getSettings(),
+    window.power.getSnapshot()
+  ])
+  settings.value = loadedSettings
+  snapshot.value = loadedSnapshot
   window.addEventListener('keydown', onKeydown)
 
   await followContentHeight()
@@ -86,6 +99,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   unsubscribe?.()
+  unsubscribeSettings?.()
   unsubscribeAlert?.()
   observer?.disconnect()
   if (resetTimer !== null) clearTimeout(resetTimer)
@@ -103,7 +117,7 @@ onBeforeUnmount(() => {
     <SettingsPanel v-if="view === 'settings'" />
     <p v-else-if="devices.length === 0" class="empty">没有检测到 2.4G 接收器</p>
     <ul v-else class="devices">
-      <DeviceRow v-for="device in devices" :key="device.id" :reading="device" />
+      <DeviceRow v-for="device in devices" :key="device.id" :reading="device" :low-at="lowAt" />
     </ul>
 
     <footer class="flyout__foot">

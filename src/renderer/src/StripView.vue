@@ -11,6 +11,7 @@ import DeviceIcon from './components/DeviceIcon.vue'
  */
 
 const snapshot = ref<PowerSnapshot | null>(null)
+const settings = ref<AppSettings | null>(null)
 const root = ref<HTMLElement | null>(null)
 
 let unsubscribe: (() => void) | null = null
@@ -25,13 +26,21 @@ const devices = computed<PowerDeviceReading[]>(() =>
   [...(snapshot.value?.devices ?? [])].sort((a, b) => KIND_RANK[a.kind] - KIND_RANK[b.kind])
 )
 
-function applyTextColor(settings: AppSettings | null): void {
+function applySettings(next: AppSettings | null): void {
+  settings.value = next
   // 没设置时删掉变量，让 CSS 回落到默认白；留着旧值会在用户改回默认后继续生效
-  if (settings?.stripTextColor) {
-    document.documentElement.style.setProperty('--strip-text', settings.stripTextColor)
+  if (next?.stripTextColor) {
+    document.documentElement.style.setProperty('--strip-text', next.stripTextColor)
   } else {
     document.documentElement.style.removeProperty('--strip-text')
   }
+}
+
+// 低电的分界跟着设置走：把提醒调到 40%，浮条也要在 40% 就变脸色，不能还守着 20
+const lowAt = computed(() => settings.value?.lowBatteryPercent ?? 15)
+
+function isLow(device: PowerDeviceReading): boolean {
+  return lowAt.value > 0 && device.percent !== null && device.percent <= lowAt.value
 }
 
 /*
@@ -79,7 +88,7 @@ function onPointerEnd(): void {
 function tone(device: PowerDeviceReading): string {
   if (device.charging === true) return 'charge'
   if (device.percent === null) return 'unknown'
-  if (device.percent <= 20) return 'low'
+  if (isLow(device)) return 'low'
   return 'normal'
 }
 
@@ -104,9 +113,9 @@ onMounted(async () => {
   unsubscribe = window.power.onSnapshot((next) => {
     snapshot.value = next
   })
-  unsubscribeSettings = window.power.onSettings(applyTextColor)
+  unsubscribeSettings = window.power.onSettings(applySettings)
   snapshot.value = await window.power.getSnapshot()
-  applyTextColor(await window.power.getSettings())
+  applySettings(await window.power.getSettings())
   await fitToContent()
 
   if (root.value) {
@@ -157,7 +166,7 @@ onBeforeUnmount(() => {
         <path d="M5.8 0 .8 6.9h2.6L3 12l5-6.9H5.4z" />
       </svg>
       <svg
-        v-else-if="device.percent !== null && device.percent <= 20"
+        v-else-if="isLow(device)"
         class="strip__mark"
         width="11"
         height="11"

@@ -10,7 +10,7 @@ import { LINK_LABEL, timeOf } from '../format'
  * 两者要能同时成立——例如充电中就既是 charging 又是 stale。
  */
 
-const props = defineProps<{ reading: PowerDeviceReading }>()
+const props = defineProps<{ reading: PowerDeviceReading; lowAt: number }>()
 
 const title = computed(() => [props.reading.brand, props.reading.name].filter(Boolean).join(' '))
 
@@ -20,7 +20,8 @@ const state = computed(() => {
   // 充电优先于"没有读数"：这时数字是 service 补的接入前真值，不是空值
   if (reading.charging === true) return 'charging'
   if (reading.percent === null) return 'unsupported'
-  if (reading.percent <= 20) return 'low'
+  // lowAt <= 0 是设置里把提醒关了，这时不该有任何读数被标成低电
+  if (props.lowAt > 0 && reading.percent <= props.lowAt) return 'low'
   return 'ok'
 })
 
@@ -72,6 +73,7 @@ const meta = computed(() => {
           :percent="reading.percent"
           :charging="reading.charging"
           :stale="reading.stale"
+          :low-at="lowAt"
         />
       </div>
     </div>

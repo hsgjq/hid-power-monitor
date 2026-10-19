@@ -57,7 +57,7 @@ app.whenReady().then(() => {
 
   onSnapshot((snapshot) => {
     last = snapshot
-    if (tray) applySnapshotToTray(tray, snapshot)
+    if (tray) applySnapshotToTray(tray, snapshot, loadSettings().lowBatteryPercent)
     checkLowBattery(snapshot)
   })
 
@@ -74,6 +74,10 @@ app.whenReady().then(() => {
     const next = saveSettings(patch)
     // 只有动到浮条相关项才重建窗口，避免每次改阈值都闪一下
     if ('stripVisible' in patch || 'stripPosition' in patch) applyStrip(next)
+    // 改了阈值就重画一次托盘图标，不然要等下一轮轮询（最长 30 秒）才看得见效
+    if ('lowBatteryPercent' in patch && tray && last) {
+      applySnapshotToTray(tray, last, next.lowBatteryPercent)
+    }
     // 弹层里改的颜色要立刻反映到已经显示着的浮条上，两边是不同窗口
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send('settings:changed', next)

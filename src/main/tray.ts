@@ -51,7 +51,11 @@ function ring(buf: Buffer, x0: number, y0: number, x1: number, y1: number, color
   fill(buf, x1, y0 + 1, x1, y1 - 1, color, 255)
 }
 
-export function drawBatteryIcon(percent: number | null, charging: boolean): NativeImage {
+export function drawBatteryIcon(
+  percent: number | null,
+  charging: boolean,
+  lowAt: number
+): NativeImage {
   const buf = Buffer.alloc(SIZE * SIZE * 4)
 
   fill(buf, 2, 9, 26, 24, DARK, 215)
@@ -65,7 +69,8 @@ export function drawBatteryIcon(percent: number | null, charging: boolean): Nati
   if (percent !== null) {
     const innerWidth = 24 - 4 - 2
     const filled = Math.max(1, Math.round((innerWidth * Math.min(100, Math.max(0, percent))) / 100))
-    const color = charging ? CHARGING : percent <= 20 ? LOW : LIGHT
+    // 低电分界用用户在设置里调的那个值；<=0 是"关闭提醒"，这时不该有任何东西标红
+    const color = charging ? CHARGING : lowAt > 0 && percent <= lowAt ? LOW : LIGHT
     fill(buf, 6, 13, 6 + filled - 1, 20, color, 255)
   }
 
@@ -85,7 +90,8 @@ export function createTray(
   onRefresh: () => void,
   onQuit: () => void
 ): Tray {
-  const tray = new Tray(drawBatteryIcon(null, false))
+  // 还没有读数时 lowAt 传 0：这一张只画外壳
+  const tray = new Tray(drawBatteryIcon(null, false, 0))
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: '刷新', click: onRefresh },
@@ -100,13 +106,17 @@ export function createTray(
   return tray
 }
 
-export function applySnapshotToTray(tray: Tray, snapshot: PowerSnapshot): void {
+export function applySnapshotToTray(
+  tray: Tray,
+  snapshot: PowerSnapshot,
+  lowAt: number
+): void {
   const known = snapshot.devices.filter((device) => device.percent !== null)
   const worst = known.reduce<number | null>((acc, device) => {
     if (device.percent === null) return acc
     return acc === null ? device.percent : Math.min(acc, device.percent)
   }, null)
   const charging = known.some((device) => device.charging === true)
-  tray.setImage(drawBatteryIcon(worst, charging))
+  tray.setImage(drawBatteryIcon(worst, charging, lowAt))
   tray.setToolTip(formatTooltip(snapshot))
 }

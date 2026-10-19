@@ -116,7 +116,7 @@ onMounted(async () => {
     <li class="setting">
       <div>
         <p class="setting__label">低电量提醒</p>
-        <p class="setting__hint">低于该值时弹一次系统通知</p>
+        <p class="setting__hint">低于该值时弹通知，并把读数标红</p>
       </div>
       <div class="stepper">
         <button
