@@ -44,44 +44,49 @@ function isLow(device: PowerDeviceReading): boolean {
 }
 
 /*
- * 拖动：按下时告诉主进程"光标在哪、窗口在哪"的差值，之后每帧最多发一次屏幕坐标让它摆放。
+ * 拖动：按下时告诉主进程"光标在哪、窗口在哪"的差值，之后把屏幕坐标交给它摆放。
  * 用 pointermove 的 screenX/screenY（真实屏幕坐标），不能用 movementX/clientX——窗口跟着
- * 光标走之后那些值会被窗口位移抵消，手感变成"粘住不动"。按帧节流是因为鼠标上报频率
- * 可能到 1000Hz，逐条发会把 IPC 灌满。
+ * 光标走之后那些值会被窗口位移抵消，手感变成"粘住不动"。
+ *
+ * 两个刻意不依赖的东西：
+ * 1) 不靠 requestAnimationFrame 投递位移。锁屏再解锁之后 Chromium 可能不再给这个窗口发帧
+ *    （它被算作被遮挡），那时鼠标事件照样到、rAF 回调却不跑，浮条就再也拖不动了。
+ *    现在按时间自己在事件里节流，1000Hz 的鼠标也不会把 IPC 灌满。
+ * 2) 不把 setPointerCapture 放在 begin 之前。它的 pointerId 在解锁后可能是失效的，抛异常
+ *    就会让主进程收不到"按下"，之后每次 move 都因为没有偏移量而被丢掉——这个状态自己不会恢复，
+ *    只有重启或重建浮条才好，正是之前那个 bug 的样子。
  */
 let dragging = false
-let pendingCursor: { x: number; y: number } | null = null
-let scheduled = 0
+let lastSentAt = 0
+const SEND_INTERVAL_MS = 8
 
-function flushDrag(): void {
-  scheduled = 0
-  if (!pendingCursor) return
-  const cursor = pendingCursor
-  pendingCursor = null
+function sendMove(cursor: { x: number; y: number }, force: boolean): void {
+  const now = performance.now()
+  if (!force && now - lastSentAt < SEND_INTERVAL_MS) return
+  lastSentAt = now
   window.power.moveStripDrag(cursor)
 }
 
 function onPointerDown(event: PointerEvent): void {
   if (event.button !== 0) return
   dragging = true
-  ;(event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId)
   window.power.beginStripDrag({ x: event.screenX, y: event.screenY })
+  try {
+    ;(event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId)
+  } catch {
+    // 指针捕获只是让鼠标移出浮条也能收到 up，失败不该影响拖动本身
+  }
 }
 
 function onPointerMove(event: PointerEvent): void {
   if (!dragging) return
-  pendingCursor = { x: event.screenX, y: event.screenY }
-  if (!scheduled) scheduled = requestAnimationFrame(flushDrag)
+  sendMove({ x: event.screenX, y: event.screenY }, false)
 }
 
-function onPointerEnd(): void {
+function onPointerEnd(event?: PointerEvent): void {
   if (!dragging) return
   dragging = false
-  if (scheduled) {
-    cancelAnimationFrame(scheduled)
-    scheduled = 0
-  }
-  pendingCursor = null
+  if (event) sendMove({ x: event.screenX, y: event.screenY }, true)
   window.power.endStripDrag()
 }
 
