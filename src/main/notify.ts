@@ -17,11 +17,18 @@ function emitAlert(alert: LowBatteryAlert): void {
   }
 }
 
-export function checkLowBattery(snapshot: PowerSnapshot): void {
+export function checkLowBattery(snapshot: PowerSnapshot, onOpen: () => void): void {
   const { lowBatteryPercent, soundAlert } = loadSettings()
   if (lowBatteryPercent <= 0) {
     alerted.clear()
     return
+  }
+
+  // 本轮已经不存在的设备要从去重集合里放掉：滞回是为了防刷屏，不是永久静音。
+  // 一块 10% 的鼠标拔掉再插回来，应该能再提醒一次
+  const present = new Set(snapshot.devices.map((device) => device.id))
+  for (const id of [...alerted]) {
+    if (!present.has(id)) alerted.delete(id)
   }
 
   for (const device of snapshot.devices) {
@@ -32,10 +39,12 @@ export function checkLowBattery(snapshot: PowerSnapshot): void {
       alerted.add(device.id)
       const label = `${device.brand}${device.name}`
       const alert: LowBatteryAlert = { deviceId: device.id, label, percent: device.percent }
-      new Notification({
+      const notification = new Notification({
         title: `${label}电量低`,
         body: `剩余 ${device.percent}%，记得充电`
-      }).show()
+      })
+      notification.on('click', onOpen)
+      notification.show()
       if (soundAlert) emitAlert(alert)
     } else if (device.percent >= lowBatteryPercent + HYSTERESIS) {
       alerted.delete(device.id)

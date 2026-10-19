@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, ipcMain } from 'electron'
+import { app, BrowserWindow, clipboard, ipcMain, screen } from 'electron'
 import { createFlyoutWindow, resizeFlyout, showFlyout } from './flyout'
 import { buildDiagnostics } from './hid/diagnostics'
 import {
@@ -30,6 +30,15 @@ let flyout: BrowserWindow | null = null
 let tray: ReturnType<typeof createTray> | null = null
 let last: PowerSnapshot | null = null
 
+function trayAnchorPoint(): { x: number; y: number } {
+  const bounds = tray?.getBounds()
+  if (!bounds || bounds.width === 0) {
+    const area = screen.getPrimaryDisplay().workArea
+    return { x: area.x + area.width - 40, y: area.y + 4 }
+  }
+  return { x: bounds.x + bounds.width / 2, y: bounds.y }
+}
+
 function toggleFlyout(point: { x: number; y: number }): void {
   if (!flyout) return
   if (flyout.isVisible()) {
@@ -37,6 +46,16 @@ function toggleFlyout(point: { x: number; y: number }): void {
     return
   }
   showFlyout(flyout, point)
+}
+
+/*
+ * 把面板叫出来，不切换：系统通知被点击、或者又启动了一个实例时用它。
+ * 用 toggle 会有个怪事——面板恰好开着时这些动作反而把它收掉。
+ * 托盘图标被折进溢出区时 getBounds() 给的是负坐标，所以那种情况下退到屏幕右下角。
+ */
+function revealFlyout(): void {
+  if (!flyout) return
+  if (!flyout.isVisible()) showFlyout(flyout, trayAnchorPoint())
 }
 
 function applyStrip(settings: AppSettings): void {
@@ -58,7 +77,7 @@ app.whenReady().then(() => {
   onSnapshot((snapshot) => {
     last = snapshot
     if (tray) applySnapshotToTray(tray, snapshot, loadSettings().lowBatteryPercent)
-    checkLowBattery(snapshot)
+    checkLowBattery(snapshot, revealFlyout)
   })
 
   ipcMain.handle('power:get-snapshot', () => last ?? pushSnapshot())
@@ -110,8 +129,9 @@ app.whenReady().then(() => {
   startPolling()
 })
 
+// 再开一个实例（双击桌面图标）意图是"把应用叫出来"，不是把它收掉
 app.on('second-instance', () => {
-  if (flyout?.isVisible()) flyout.hide()
+  revealFlyout()
 })
 
 app.on('before-quit', () => {
