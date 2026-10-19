@@ -30,7 +30,7 @@
 | 迈从 无线键盘 | `05AC:024F`（Compx 方案） | `0xFF02` 无线 / `0xFF04` 有线 | 电量、充电状态 |
 | 狼蛛 SC580 无线鼠标 | `248A:5B2F`（泰凌公模 dongle） | MI_01 Col04 的 `0xFF00` feature report 12 | 电量、充电状态、固件型号 |
 
-未支持的设备不会被悄悄丢掉。设置里有一栏「检测到的 HID 设备」，把枚举到的每一组设备连 VID:PID、集合的 usage page，以及它为什么没有显示（没有厂商自定义集合、字符串也不像 2.4G 接收器等）逐条列出，可以一键复制。要问"我的设备为什么读不到"，把这段清单贴出来最直接。
+未支持的设备不会被悄悄丢掉。设置里有一栏「检测到的 HID 设备」，把枚举到的每一组设备连 VID:PID、集合的 usage page，以及它为什么没有显示（没有厂商自定义集合、字符串也不像 2.4G 接收器等）逐条列出，可以一键复制。
 
 ## 界面上能看到什么
 
@@ -102,7 +102,7 @@ src/
 
 按规范暴露电池的集合（usage page `0x85`，或 `0x06` + usage `0x20`）不需要私有协议。但 node-hid 拿不到 `HidP_GetValueCaps`，无法把 usage 映射到具体的 bit 偏移，所以只在"恰好只有一个报告长度读得通、那一格正好 1 字节、值落在 1..100"时才出数，其余情况一律返回未知，界面显示 `--`。
 
-不做"扫第一个看起来像百分比的字节"这种启发式：那个字节也可能是温度、剩余 mAh 或告警等级，随便取一个会给出一个像是真的错数字，比读不到更麻烦。这台机器上目前一组这样的集合都没有，所以这条路径只有代码，没有实机结论。
+不做"扫第一个看起来像百分比的字节"这种启发式：那个字节也可能是温度、剩余 mAh 或告警等级，随便取一个会给出一个像是真的错数字，比读不到更麻烦。
 </details>
 
 ## 刻意不做的功能
@@ -115,7 +115,11 @@ src/
 
 ## 本地运行
 
+先说前提：Windows 10 或 11；Node 要 20.19 以上，或者 22.12 以上（Vite 8 和 electron-vite 6 的 engines 都是 `^20.19.0 || >=22.12.0`，21.x 和 22.0 到 22.11 不在范围内）；包管理器用 pnpm，没装的话执行一次 `corepack enable` 就够了。仓库里的 `.npmrc` 把 Electron 的下载地址指到了 npmmirror，国内网络下装依赖不会卡在拉 `electron-vxx-win32-x64.zip`。
+
 ```cmd
+git clone https://github.com/hsgjq/hid-power-monitor.git
+cd hid-power-monitor
 pnpm install
 pnpm dev          :: 只起托盘，面板要你点图标才弹；开了浮条的话启动后就只有浮条
 pnpm typecheck    :: 主进程用 tsc、渲染层用 vue-tsc 各查一遍
@@ -124,33 +128,33 @@ pnpm icon         :: 重新生成 build/icon.ico（托盘那套自绘电池的�
 pnpm dist         :: 先跑 build，再用 electron-builder 出 nsis 安装包到 dist/
 ```
 
+跑之前把接收器插上。两台都没插时面板会显示「没有检测到 2.4G 接收器」，那是设计里的空态，不是程序坏了。
+
 打出来的安装包是 per-user 的 nsis，不要管理员权限，装完桌面和开始菜单各一个快捷方式。没配自动更新，所以产物里不该有 `latest.yml` 之类的更新元数据（`publish: null`）。
 
 一个环境上的坑：把输出目录放在工作区内时，刚写出的 `*.asar` 会被本机的索引或杀软握住句柄，electron-builder 那步 `win-unpacked.tmp` 改名会一直 EPERM，删也删不掉（实测两次，换目录名也一样）。绕法是构建时把产物指到工作区外：`npx electron-builder --win -c.directories.output=%LOCALAPPDATA%\Temp\hpm-pack`。配置里同时把 `electronDist` 指向 `node_modules/electron/dist`，省掉下载再解压那一趟。
 
-`pnpm probe` 是 HID 枚举的命令行版本。需要注意它默认会执行 CompX 写探针（`src/main/hid/compx.ts` 的 cmd 1/2/3/4，会真的向 `0xFF02` 端点发帧，cmd 1 还带 4 字节随机数）。那组帧只服务于协议调研，应用本身没有引用它，只想只读运行请加 `--skip-compx`。
+`pnpm probe` 是 HID 枚举的命令行版本，默认只读：它只做 `getFeatureReport` 一类的读取。要跑 CompX 写探针（`src/main/hid/compx.ts` 的 cmd 1/2/3/4，会真的向 `0xFF02` 端点发帧，cmd 1 还带 4 字节随机数）必须显式加 `--compx`，那组帧只服务于协议调研，应用本身没有引用它。输出里会有一行 `CompX write probe: disabled (read-only; pass --compx to send)`，所以发没发帧能被结果证明，不用去读代码。
 
 `scripts/` 下其余的是调研期的只读工具：抓驱动帧、监听某个集合，以及校验只读守卫的断言脚本。
 
 ## 尚未完成
 
-安装包还没在这台机器上装过。目前核对过的是产物结构：asar 里只有 `node_modules`、`out`、`package.json` 三项，原生模块只解出 win32-x64 那一份，源码目录和调研留档都没进包。装完之后托盘读数、开机自启那条注册表项（现在指向装好的 exe）都还要实机确认一次。
+打包版和开发态共用同一个 userData 目录（都叫 `hid-power-monitor`），单实例锁因此是共享的：dev 在跑的时候启动装好的 exe，后者会立刻退出。要么先关 dev，要么给开发态单独设一个 userData。
 
-另外开发态和打包版用的是同一个 userData 目录（都叫 `hid-power-monitor`），单实例锁因此是共享的：dev 在跑的时候启动装好的 exe，后者会立刻退出。要么先关 dev，要么给开发态单独设一个 userData。
+蓝牙支持没做。枚举层看得到蓝牙 HID 设备（node-hid 走的就是 HID 类），但同一台键盘切到蓝牙之后 VID:PID 会变，迈从和狼蛛那两套私有协议都不再命中；BLE 设备的电量还常常只在 GATT Battery Service 里，不一定同时提供 HID feature report，那种情况连读取入口都没有。
 
-蓝牙路径待实机验证。枚举层能看到蓝牙 HID 设备（node-hid 走的就是 HID 类），但同一台键盘切换到蓝牙后 VID:PID 会变，私有协议不再命中；BLE 的电量还常常走 GATT Battery Service，不一定同时提供 HID feature report。本机目前没有可测的蓝牙键鼠。
+把 HID 读取挪出主线程没做。node-hid 能在 `worker_threads` 里加载是验证过的（worker 枚举到 43 台，与主线程一致），但挪过去要把整条轮询链路改成异步，而现在每 30 秒一次的同步读只占几十毫秒，收益撑不起这次改造。
 
-把 HID 读取挪出主线程暂时没做。已经验证 node-hid 能在 `worker_threads` 里加载（worker 枚举到 43 台，与主线程一致），但那要把整条轮询链路改成异步，而唯一可靠的验证方式是拿真实设备跑端到端，收益只是每 30 秒省下几十毫秒，所以这一步先放着。
+## 加一台新设备
 
-## 想支持自己的设备
+要弄清三件事：接收器的 `VID` 和 `PID`、连接方式（2.4G / 有线 / 蓝牙）、电量藏在哪个厂商自定义集合里。前两件和第三件的线索都在面板的诊断清单里，能直接复制；帧的具体构成要靠抓包确认（Wireshark / USBPcap）。没有实测设备就不写协议，写了也只是拿别人的硬件试错。
 
-需要三样信息：设备型号、连接方式（2.4G / 有线 / 蓝牙）、以及 `VID` 和 `PID`——面板里的诊断清单可以直接复制。有抓包条件的话，附一份 Wireshark / USBPcap 的交互数据包会快很多。
-
-代码上要改的只有一处：在 `power/registry.ts` 加一行表项，再写一个只回测量值的 `measure(group)`。判据必须能被自己证伪，读不通就回 `percent: null` 让界面显示 `--`，不要填一个数值合理的猜测。
+代码上只改一处：在 `power/registry.ts` 加一行表项，再写一个只回测量值的 `measure(group)`。判据必须能被自己证伪，读不通就回 `percent: null` 让界面显示 `--`，不要填一个数值合理的猜测。
 
 ---
 
 <p align="center">
   <b>如果它帮你省掉了一个厂商驱动套件，欢迎点个 Star。</b><br>
-  有问题或希望支持你手上那台设备，开 Issue 时把诊断清单一起贴上来。
+  支持的设备以仓库里那张表为准，读不到的设备一律显示 --，不猜数字。
 </p>
