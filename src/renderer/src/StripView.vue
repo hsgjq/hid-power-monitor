@@ -18,7 +18,12 @@ let unsubscribeSettings: (() => void) | null = null
 let observer: ResizeObserver | null = null
 let sentSize = ''
 
-const devices = computed<PowerDeviceReading[]>(() => snapshot.value?.devices ?? [])
+const KIND_RANK: Record<PowerDeviceReading['kind'], number> = { keyboard: 0, mouse: 1, receiver: 2 }
+
+// 浮条固定"键盘在左、鼠标在右"，不跟面板的排序走：位置稳定才不用每次重新认
+const devices = computed<PowerDeviceReading[]>(() =>
+  [...(snapshot.value?.devices ?? [])].sort((a, b) => KIND_RANK[a.kind] - KIND_RANK[b.kind])
+)
 
 function applyTextColor(settings: AppSettings | null): void {
   // 没设置时删掉变量，让 CSS 回落到默认白；留着旧值会在用户改回默认后继续生效
