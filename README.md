@@ -120,13 +120,23 @@ pnpm install
 pnpm dev          :: 只起托盘，面板要你点图标才弹；开了浮条的话启动后就只有浮条
 pnpm typecheck    :: 主进程用 tsc、渲染层用 vue-tsc 各查一遍
 pnpm build        :: electron-vite 三层打包到 out/
+pnpm icon         :: 重新生成 build/icon.ico（托盘那套自绘电池的矢量版）
+pnpm dist         :: 先跑 build，再用 electron-builder 出 nsis 安装包到 dist/
 ```
+
+打出来的安装包是 per-user 的 nsis，不要管理员权限，装完桌面和开始菜单各一个快捷方式。没配自动更新，所以产物里不该有 `latest.yml` 之类的更新元数据（`publish: null`）。
+
+一个环境上的坑：把输出目录放在工作区内时，刚写出的 `*.asar` 会被本机的索引或杀软握住句柄，electron-builder 那步 `win-unpacked.tmp` 改名会一直 EPERM，删也删不掉（实测两次，换目录名也一样）。绕法是构建时把产物指到工作区外：`npx electron-builder --win -c.directories.output=%LOCALAPPDATA%\Temp\hpm-pack`。配置里同时把 `electronDist` 指向 `node_modules/electron/dist`，省掉下载再解压那一趟。
 
 `pnpm probe` 是 HID 枚举的命令行版本。需要注意它默认会执行 CompX 写探针（`src/main/hid/compx.ts` 的 cmd 1/2/3/4，会真的向 `0xFF02` 端点发帧，cmd 1 还带 4 字节随机数）。那组帧只服务于协议调研，应用本身没有引用它，只想只读运行请加 `--skip-compx`。
 
 `scripts/` 下其余的是调研期的只读工具：抓驱动帧、监听某个集合，以及校验只读守卫的断言脚本。
 
 ## 尚未完成
+
+安装包还没在这台机器上装过。目前核对过的是产物结构：asar 里只有 `node_modules`、`out`、`package.json` 三项，原生模块只解出 win32-x64 那一份，源码目录和调研留档都没进包。装完之后托盘读数、开机自启那条注册表项（现在指向装好的 exe）都还要实机确认一次。
+
+另外开发态和打包版用的是同一个 userData 目录（都叫 `hid-power-monitor`），单实例锁因此是共享的：dev 在跑的时候启动装好的 exe，后者会立刻退出。要么先关 dev，要么给开发态单独设一个 userData。
 
 蓝牙路径待实机验证。枚举层能看到蓝牙 HID 设备（node-hid 走的就是 HID 类），但同一台键盘切换到蓝牙后 VID:PID 会变，私有协议不再命中；BLE 的电量还常常走 GATT Battery Service，不一定同时提供 HID feature report。本机目前没有可测的蓝牙键鼠。
 
