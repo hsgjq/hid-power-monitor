@@ -1,0 +1,105 @@
+import { Menu, Tray, nativeImage } from 'electron'
+import type { NativeImage } from 'electron'
+import type { PowerSnapshot } from '../shared/types'
+
+const SIZE = 32
+const LIGHT: Rgb = { r: 236, g: 239, b: 243 }
+const DARK: Rgb = { r: 12, g: 13, b: 16 }
+const CHARGING: Rgb = { r: 108, g: 208, b: 140 }
+const LOW: Rgb = { r: 232, g: 106, b: 92 }
+
+interface Rgb {
+  r: number
+  g: number
+  b: number
+}
+
+function put(buf: Buffer, x: number, y: number, color: Rgb, alpha: number): void {
+  if (x < 0 || y < 0 || x >= SIZE || y >= SIZE) return
+  const i = (y * SIZE + x) * 4
+  buf[i] = color.b
+  buf[i + 1] = color.g
+  buf[i + 2] = color.r
+  buf[i + 3] = alpha
+}
+
+function fill(
+  buf: Buffer,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  color: Rgb,
+  alpha: number
+): void {
+  for (let y = y0; y <= y1; y += 1) {
+    for (let x = x0; x <= x1; x += 1) put(buf, x, y, color, alpha)
+  }
+}
+
+function ring(buf: Buffer, x0: number, y0: number, x1: number, y1: number, color: Rgb): void {
+  fill(buf, x0, y0, x1, y0, color, 255)
+  fill(buf, x0, y1, x1, y1, color, 255)
+  fill(buf, x0, y0 + 1, x0, y1 - 1, color, 255)
+  fill(buf, x1, y0 + 1, x1, y1 - 1, color, 255)
+}
+
+export function drawBatteryIcon(percent: number | null, charging: boolean): NativeImage {
+  const buf = Buffer.alloc(SIZE * SIZE * 4)
+
+  fill(buf, 2, 9, 26, 24, DARK, 215)
+  fill(buf, 4, 11, 24, 22, { r: 0, g: 0, b: 0 }, 0)
+  fill(buf, 26, 14, 28, 19, DARK, 215)
+  fill(buf, 27, 15, 28, 18, { r: 0, g: 0, b: 0 }, 0)
+
+  ring(buf, 4, 11, 24, 22, LIGHT)
+  fill(buf, 27, 15, 28, 18, LIGHT, 255)
+
+  if (percent !== null) {
+    const innerWidth = 24 - 4 - 2
+    const filled = Math.max(1, Math.round((innerWidth * Math.min(100, Math.max(0, percent))) / 100))
+    const color = charging ? CHARGING : percent <= 20 ? LOW : LIGHT
+    fill(buf, 6, 13, 6 + filled - 1, 20, color, 255)
+  }
+
+  return nativeImage.createFromBitmap(buf, { width: SIZE, height: SIZE })
+}
+
+function formatTooltip(snapshot: PowerSnapshot): string {
+  const parts = snapshot.devices.map((device) => {
+    const value = device.percent === null ? '--' : `${device.percent}%`
+    return `${device.brand}${device.name.replace('无线', '')} ${value}`
+  })
+  return `2.4G 设备电量  ${parts.join('  |  ')}`
+}
+
+export function createTray(
+  onToggle: (position: { x: number; y: number }) => void,
+  onRefresh: () => void,
+  onQuit: () => void
+): Tray {
+  const tray = new Tray(drawBatteryIcon(null, false))
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: '刷新', click: onRefresh },
+      { type: 'separator' },
+      { label: '退出', click: onQuit }
+    ])
+  )
+  tray.on('click', () => {
+    const bounds = tray.getBounds()
+    onToggle({ x: bounds.x + bounds.width / 2, y: bounds.y })
+  })
+  return tray
+}
+
+export function applySnapshotToTray(tray: Tray, snapshot: PowerSnapshot): void {
+  const known = snapshot.devices.filter((device) => device.percent !== null)
+  const worst = known.reduce<number | null>((acc, device) => {
+    if (device.percent === null) return acc
+    return acc === null ? device.percent : Math.min(acc, device.percent)
+  }, null)
+  const charging = known.some((device) => device.charging === true)
+  tray.setImage(drawBatteryIcon(worst, charging))
+  tray.setToolTip(formatTooltip(snapshot))
+}
