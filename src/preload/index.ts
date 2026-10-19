@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { AppSettings, LowBatteryAlert, PowerBridge, PowerSnapshot } from '../shared/types'
 
+/*
+ * 只暴露这几个方法，不把 ipcRenderer 本身递出去：渲染层能调什么由这里穷举，
+ * 频道名写错会在类型上报错，而不是运行时静默失败。
+ */
+
 const api: PowerBridge = {
   getSnapshot(): Promise<PowerSnapshot> {
     return ipcRenderer.invoke('power:get-snapshot')

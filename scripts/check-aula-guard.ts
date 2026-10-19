@@ -15,22 +15,33 @@ echo[5] = 1
 const zeroPercent = Buffer.from(real)
 zeroPercent[18] = 0
 
+// 充电中：设备把电量字节钉成 100、idx19 置 1，其余不动
 const charging = Buffer.from(real)
 charging[18] = 100
 charging[19] = 1
 
+// 真充满：idx19 不再是 1，100 就该照实显示
+const fullUnplugged = Buffer.from(real)
+fullUnplugged[18] = 100
+
 const cases: Array<[string, Buffer, string]> = [
-  ['真实帧', real, '56%'],
+  ['真实帧', real, '56%|未充电'],
   ['自己写回去的空帧', echo, 'null'],
   ['百分比为 0 的帧', zeroPercent, 'null'],
-  ['充电中帧', charging, '100% + charging']
+  ['充电中帧（100 是占位）', charging, 'null|充电中'],
+  ['拔线后 100 帧', fullUnplugged, '100%|未充电']
 ]
+
+function describe(block: Buffer): string {
+  const parsed = parseInfoBlock(block)
+  if (!parsed) return 'null'
+  return `${parsed.percent === null ? 'null' : parsed.percent + '%'}|${parsed.charging ? '充电中' : '未充电'}`
+}
 
 let failed = 0
 for (const [label, block, expect] of cases) {
-  const parsed = parseInfoBlock(block)
-  const got = parsed ? `${parsed.percent}% ${parsed.charging ? '充电中' : ''} ${parsed.model}`.trim() : 'null'
-  const ok = expect === 'null' ? parsed === null : got.startsWith(expect.split(' ')[0])
+  const got = describe(block)
+  const ok = got === expect
   if (!ok) failed++
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${label} -> ${got}   (期望 ${expect})`)
 }

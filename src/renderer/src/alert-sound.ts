@@ -1,3 +1,10 @@
+/*
+ * 低电量提示音。Electron 的 Notification 在 Windows 上不能指定声音，所以主进程发
+ * power:alert 事件，由这里用 Web Audio 合成两声短蜂鸣。AudioContext 做成单例：
+ * 同一页面能创建的实例有上限（实测约 6 个），每次提醒都新建会直接失败。
+ * 面板平时是隐藏窗口，主进程那边给它关了后台节流，声音才会在没人打开面板时响。
+ */
+
 let context: AudioContext | null = null
 
 function ensureContext(): AudioContext | null {

@@ -7,6 +7,13 @@ import { groupHidDevices, listHidInterfaces, toHex } from '../hid/enumerate'
 import { measureAulaMouse } from './aula'
 import { measureMchoseKeyboard } from './mchose'
 
+/*
+ * 设备登记表：这里是"叫什么、是键盘还是鼠标"的唯一出处。
+ * provider 只回测量值（DeviceMeasurement），不参与命名，加一台新设备就是加一行表项
+ * 加一个 measure 函数。表外的 2.4G 接收器也会自动出现在列表里，只是名字只能用系统
+ * 给的厂商串/产品串兜底、电量显示未识别——不做静默忽略，否则用户会以为程序没工作。
+ */
+
 interface DeviceEntry {
   vendorId: number
   productId: number

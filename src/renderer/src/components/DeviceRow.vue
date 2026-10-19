@@ -4,33 +4,41 @@ import type { PowerDeviceReading } from '@shared/types'
 import BatteryGlyph from './BatteryGlyph.vue'
 import { LINK_LABEL, timeOf } from '../format'
 
+/*
+ * 一行一台设备。状态只决定配色和图标，"读数是否还作数"由 stale 单独标记，
+ * 两者要能同时成立——例如充电中就既是 charging 又是 stale。
+ */
+
 const props = defineProps<{ reading: PowerDeviceReading }>()
+
+const title = computed(() => [props.reading.brand, props.reading.name].filter(Boolean).join(' '))
 
 const state = computed(() => {
   const reading = props.reading
   if (reading.status === 'absent') return 'absent'
-  if (reading.percent === null) return 'unsupported'
-  if (reading.stale) return 'stale'
+  // 充电优先于"没有读数"：这时数字是 service 补的接入前真值，不是空值
   if (reading.charging === true) return 'charging'
+  if (reading.percent === null) return 'unsupported'
   if (reading.percent <= 20) return 'low'
   return 'ok'
 })
 
-const title = computed(() => [props.reading.brand, props.reading.name].filter(Boolean).join(' '))
-
 const meta = computed(() => {
   const reading = props.reading
   if (reading.percent === null) return reading.note ?? '暂无读数'
+
   const time = timeOf(reading.updatedAt)
   const parts = [LINK_LABEL[reading.link]]
-  if (reading.model) parts.push(reading.model)
+  // 型号和"充电中"二选一，两个都上副标题会挤不下
+  if (reading.charging === true) parts.push('充电中')
+  else if (reading.model) parts.push(reading.model)
   if (time) parts.push(reading.stale ? `上次 ${time}` : time)
   return parts.join(' · ')
 })
 </script>
 
 <template>
-  <li class="device" :data-state="state">
+  <li class="device" :data-state="state" :data-stale="reading.stale ? 'true' : 'false'">
     <span class="device__glyph" aria-hidden="true">
       <svg
         v-if="reading.kind === 'keyboard'"

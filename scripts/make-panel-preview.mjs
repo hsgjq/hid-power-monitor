@@ -6,10 +6,10 @@ const keyboardIcon = `<svg width="17" height="17" viewBox="0 0 17 17" fill="none
 const mouseIcon = `<svg width="17" height="17" viewBox="0 0 17 17" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><rect x="4.1" y="2" width="8.8" height="13" rx="4.4"/><path d="M8.5 4.9v2.6"/></svg>`
 const bolt = `<svg class="device__bolt" width="9" height="12" viewBox="0 0 9 12" fill="currentColor"><path d="M5.8 0 .8 6.9h2.6L3 12l5-6.9H5.4z"/></svg>`
 
-function row({ kind, brand, name, state, percent, tone, meta }) {
+function row({ kind, brand, name, state, percent, tone, meta, stale = false }) {
   const width = percent === null ? 0 : Math.max(3, percent)
   const value = percent === null ? '--' : `${percent}<small>%</small>`
-  return `<li class="device" data-state="${state}">
+  return `<li class="device" data-state="${state}" data-stale="${stale}">
     <span class="device__glyph">${kind === 'keyboard' ? keyboardIcon : mouseIcon}</span>
     <div class="device__body">
       <p class="device__name">${brand} ${name}</p>
@@ -17,7 +17,7 @@ function row({ kind, brand, name, state, percent, tone, meta }) {
     </div>
     <div class="device__readout">
       <p class="device__value">${state === 'charging' ? bolt : ''}${value}</p>
-      <div class="device__battery"><span class="battery" data-tone="${tone}"><span class="battery__fill" style="width:${width}%"></span></span></div>
+      <div class="device__battery"><span class="battery" data-tone="${tone}" data-stale="${stale}"><span class="battery__fill" style="width:${width}%"></span></span></div>
     </div>
   </li>`
 }
@@ -29,7 +29,12 @@ const devicesBody = `<ul class="devices">
 
 const devicesLow = `<ul class="devices">
   ${row({ kind: 'keyboard', brand: '迈从', name: '无线键盘', state: 'low', percent: 12, tone: 'low', meta: '2.4G · 22:41' })}
-  ${row({ kind: 'mouse', brand: '狼蛛', name: '无线鼠标', state: 'stale', percent: 56, tone: 'stale', meta: '2.4G · 上次 21:58' })}
+  ${row({ kind: 'mouse', brand: '狼蛛', name: '无线鼠标', state: 'ok', percent: 56, tone: 'normal', meta: '2.4G · M137 · 上次 21:58', stale: true })}
+</ul>`
+
+const devicesCharging = `<ul class="devices">
+  ${row({ kind: 'mouse', brand: '狼蛛', name: '无线鼠标', state: 'charging', percent: 54, tone: 'charge', meta: '2.4G · 充电中 · 上次 05:20', stale: true })}
+  ${row({ kind: 'keyboard', brand: '迈从', name: '无线键盘', state: 'unsupported', percent: null, tone: 'unknown', meta: '接收器没有响应电量查询' })}
 </ul>`
 
 const settingsBody = `<ul class="settings">
@@ -80,6 +85,7 @@ const stamp = `<span class="flyout__stamp">22:41</span>`
 const shots = [
   panel({ title: '设备视图', stamp, body: devicesBody, foot: devicesFoot }),
   panel({ title: '设备视图 · 低电 + 过期', stamp: '', body: devicesLow, foot: devicesFoot }),
+  panel({ title: '设备视图 · 充电中 + 未识别', stamp: '', body: devicesCharging, foot: devicesFoot }),
   panel({ title: '设置视图', stamp: '', body: settingsBody, foot: settingsFoot }),
   panel({ title: '设置视图 · 关闭态', stamp: '', body: settingsOff, foot: settingsFoot })
 ].join('')

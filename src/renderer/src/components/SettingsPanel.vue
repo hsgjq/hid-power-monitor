@@ -3,6 +3,13 @@ import { onMounted, ref } from 'vue'
 import type { AppSettings } from '@shared/types'
 import { playLowBatteryChime } from '../alert-sound'
 
+/*
+ * 设置项。控件全是原生 checkbox / button 加样式，没有自绘：开关是 appearance:none
+ * 的 checkbox 配 role="switch"，保留空格切换和 focus-visible 描边。
+ * 阈值 0 表示整条提醒关闭，此时提示音那一行直接不渲染，不留一个按了没反应的死控件。
+ * 打开提示音时立刻响一声，作为"这功能生效了"的即时反馈。
+ */
+
 const STEP = 5
 const MAX = 50
 

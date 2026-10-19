@@ -6,6 +6,14 @@ import type {
   HidScanResult
 } from '../../shared/types'
 
+/*
+ * HID 枚举。一个物理接收器在 Windows 上会暴露成多个 HID 集合（鼠标、键盘、消费者
+ * 控制、厂商自定义各一个），所以先按 VID:PID 归组再判断，而不是把每个接口当一台设备。
+ *
+ * 两个坑：node-hid 在厂商集合上可能不给 usage（undefined），要按 null 处理；
+ * usage page >= 0xFF00 是自定义集合，2.4G 接收器的电量协议基本都藏在这些里面。
+ */
+
 interface RawHidDevice {
   vendorId: number
   productId: number

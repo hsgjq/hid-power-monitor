@@ -6,6 +6,14 @@ import SettingsPanel from './components/SettingsPanel.vue'
 import { playLowBatteryChime } from './alert-sound'
 import { timeOf } from './format'
 
+/*
+ * 面板根组件：设备视图和设置视图共用一个窗体，底部按钮切换。
+ * 高度不写死——用 ResizeObserver 量真实内容再回传主进程改窗口尺寸，因为设置视图
+ * 比设备视图矮，固定高度会在下面留一坨透明空白；观察器要连同实例一起卸载，
+ * 否则热更新会攒出一串回调。
+ * "刷新中"的复位挂在快照真正到达那一刻，超时只是兜底，避免点了没反应卡成死按钮。
+ */
+
 const snapshot = ref<PowerSnapshot | null>(null)
 const refreshing = ref(false)
 const view = ref<'devices' | 'settings'>('devices')

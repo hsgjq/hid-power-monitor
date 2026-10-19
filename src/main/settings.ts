@@ -3,6 +3,13 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AppSettings } from '../shared/types'
 
+/*
+ * 设置落在 userData/settings.json，内存里再缓存一份供轮询路径同步读。
+ * 开机自启走 app.setLoginItemSettings（写 HKCU 的 Run 键，不需要管理员授权），
+ * 并带 --hidden：开机拉起时只进托盘，不要弹一个面板糊在屏幕上。
+ * 开发态打开这个开关写进去的是 electron.exe + 项目路径，只有打包后才是有效值。
+ */
+
 const DEFAULTS: AppSettings = { autoLaunch: false, lowBatteryPercent: 15, soundAlert: true }
 
 let cached: AppSettings | null = null

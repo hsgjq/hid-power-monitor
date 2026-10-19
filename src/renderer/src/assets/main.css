@@ -115,6 +115,9 @@ body {
   margin-top: 3px;
   font-size: 11px;
   color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .device__readout {
@@ -144,8 +147,12 @@ body {
   margin-top: 6px;
 }
 
-.device[data-state='stale'] .device__value,
+/* 读数过期与"未识别"共用一套暗色，跟状态色互不冲突 */
 .device[data-state='unsupported'] .device__value {
+  color: var(--text-muted);
+}
+
+.device[data-stale='true'] .device__value {
   color: var(--text-muted);
 }
 
@@ -250,7 +257,7 @@ body {
   background: var(--fill-charge);
 }
 
-.battery[data-tone='stale'] .battery__fill {
+.battery[data-stale='true'] .battery__fill {
   opacity: 0.45;
 }
 

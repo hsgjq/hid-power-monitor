@@ -1,6 +1,14 @@
 import { HID } from 'node-hid'
 import type { DeviceMeasurement, HidDeviceGroup, HidInterfaceInfo } from '../../shared/types'
 
+/*
+ * 迈从键盘（接收器 05AC:024F，Compx 方案）的电量读取，两条端点：
+ * - usage page 0xFF02：无线，20 字节 input/output，report ID 0x13。写查询后设备
+ *   会分多帧回，帧头是 [cmd, 总帧数, 当前帧号]，去掉帧尾校验再拼起来才是完整数据。
+ * - usage page 0xFF04：有线，feature-only，report ID 6、7 字节。
+ * 校验和是"含 report ID 的字节和取低 8 位"，写出去的帧要带上它，否则设备不理。
+ */
+
 const WIRELESS_REPORT_ID = 0x13
 const WIRELESS_COMMAND = 0x4a
 const WIRED_REPORT_ID = 0x06
@@ -88,6 +96,8 @@ export function measureMchoseKeyboard(group: HidDeviceGroup): DeviceMeasurement 
     link: wireless && percent !== null ? '2.4g' : wired ? 'wired' : 'unknown',
     status: percent !== null ? 'ok' : 'error',
     percent,
+    // 响应 byte1 的 flags 低 4 位在不充电时也是 1，含义没验出来之前不当充电状态用，
+    // 宁可一直显示"未知"，也不要在没插线的时候亮充电图标
     charging: null,
     model: null,
     note: percent !== null ? null : '接收器没有响应电量查询',

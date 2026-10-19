@@ -2,6 +2,13 @@ import { Menu, Tray, nativeImage } from 'electron'
 import type { NativeImage } from 'electron'
 import type { PowerSnapshot } from '../shared/types'
 
+/*
+ * 托盘图标不放静态资源：按两台设备里较低的那块电量逐像素画一张 32x32 BGRA 位图。
+ * 位图要交给 nativeImage.createFromBitmap——createFromBuffer 只收已编码图片（PNG/JPEG），
+ * 喂 raw 位图会得到一张空图标。白色描边外加一圈半透明深色底，是为了浅色任务栏上
+ * 也看得见；读不到电量时只画外壳，跟"0%"要能区分开。
+ */
+
 const SIZE = 32
 const LIGHT: Rgb = { r: 236, g: 239, b: 243 }
 const DARK: Rgb = { r: 12, g: 13, b: 16 }

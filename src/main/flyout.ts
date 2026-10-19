@@ -1,6 +1,13 @@
 import { BrowserWindow, screen } from 'electron'
 import { join } from 'node:path'
 
+/*
+ * 托盘弹层窗口：无边框 + 透明 + 不进任务栏，靠渲染层量完内容后回传高度调整大小。
+ * PANEL_HEIGHT 只是首帧默认值（按两行设备实测出来的 274），不是最终高度。
+ * transparent 窗口自己画不了系统阴影，所以 hasShadow:false，阴影由 CSS 在窗口内画，
+ * 四周留 10px 透明边给它。
+ */
+
 const PANEL_WIDTH = 340
 const PANEL_HEIGHT = 274
 const EDGE_GAP = 8

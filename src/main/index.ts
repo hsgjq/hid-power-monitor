@@ -6,6 +6,12 @@ import { loadSettings, saveSettings, syncLoginItem } from './settings'
 import { onSnapshot, pushSnapshot, startPolling, stopPolling } from './power/service'
 import type { AppSettings, PowerSnapshot } from '../shared/types'
 
+/*
+ * 主进程入口：单实例 + 托盘 + 弹层 + 轮询。
+ * 这个应用没有"主窗口"概念，面板是点托盘才弹的临时窗，所以窗口全关也不退出
+ * （见文件末尾的 window-all-closed）。
+ */
+
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
