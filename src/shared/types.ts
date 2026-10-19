@@ -148,6 +148,9 @@ export interface PowerBridge {
   quit(): void
   resize(height: number): void
   resizeStrip(width: number, height: number): void
+  beginStripDrag(cursor: StripPosition): void
+  moveStripDrag(cursor: StripPosition): void
+  endStripDrag(): void
   getSettings(): Promise<AppSettings>
   getRuntimeFlags(): Promise<RuntimeFlags>
   saveSettings(patch: Partial<AppSettings>): Promise<AppSettings>

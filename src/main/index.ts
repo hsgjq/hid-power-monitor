@@ -1,7 +1,14 @@
 import { app, BrowserWindow, clipboard, ipcMain } from 'electron'
 import { createFlyoutWindow, resizeFlyout, showFlyout } from './flyout'
 import { buildDiagnostics } from './hid/diagnostics'
-import { destroyStrip, resizeStrip, syncStrip } from './strip'
+import {
+  beginStripDrag,
+  destroyStrip,
+  endStripDrag,
+  moveStripDrag,
+  resizeStrip,
+  syncStrip
+} from './strip'
 import { applySnapshotToTray, createTray } from './tray'
 import { checkLowBattery } from './notify'
 import { loadSettings, saveSettings, syncLoginItem } from './settings'
@@ -79,6 +86,9 @@ app.whenReady().then(() => {
   ipcMain.on('strip:resize', (_event, width: number, height: number) => {
     if (Number.isFinite(width) && Number.isFinite(height)) resizeStrip(width, height)
   })
+  ipcMain.on('strip:drag-start', (_event, cursor: StripPosition) => beginStripDrag(cursor))
+  ipcMain.on('strip:drag-move', (_event, cursor: StripPosition) => moveStripDrag(cursor))
+  ipcMain.on('strip:drag-end', () => endStripDrag())
   ipcMain.on('app:quit', () => app.quit())
 
   syncLoginItem()

@@ -65,12 +65,18 @@ export function createFlyoutWindow(options: { hideOnBlur: boolean }): BrowserWin
 
 export function showFlyout(win: BrowserWindow, trayPoint: { x: number; y: number }): void {
   const area = screen.getDisplayNearestPoint(trayPoint).workArea
+  // 保留上一次由内容撑出来的高度：写死 PANEL_HEIGHT 会让"在设置视图点收起、再从托盘
+  // 打开"时窗口被压回默认高度，内容截断又没有滚动条
+  const height = Math.min(
+    Math.max(win.getBounds().height, PANEL_HEIGHT),
+    area.height - EDGE_GAP * 2
+  )
   const rawX = trayPoint.x - PANEL_WIDTH / 2
   const x = Math.min(Math.max(rawX, area.x + EDGE_GAP), area.x + area.width - PANEL_WIDTH - EDGE_GAP)
-  const y = area.y + area.height - PANEL_HEIGHT - EDGE_GAP
+  const y = area.y + area.height - height - EDGE_GAP
 
-  anchorBottom = y + PANEL_HEIGHT
-  win.setBounds({ x: Math.round(x), y: Math.round(y), width: PANEL_WIDTH, height: PANEL_HEIGHT }, false)
+  anchorBottom = y + height
+  win.setBounds({ x: Math.round(x), y: Math.round(y), width: PANEL_WIDTH, height }, false)
   win.show()
   win.focus()
 }

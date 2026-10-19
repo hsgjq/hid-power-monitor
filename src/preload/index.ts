@@ -5,7 +5,8 @@ import type {
   LowBatteryAlert,
   PowerBridge,
   PowerSnapshot,
-  RuntimeFlags
+  RuntimeFlags,
+  StripPosition
 } from '../shared/types'
 
 /*
@@ -31,6 +32,15 @@ const api: PowerBridge = {
   },
   resizeStrip(width: number, height: number): void {
     ipcRenderer.send('strip:resize', width, height)
+  },
+  beginStripDrag(cursor: StripPosition): void {
+    ipcRenderer.send('strip:drag-start', cursor)
+  },
+  moveStripDrag(cursor: StripPosition): void {
+    ipcRenderer.send('strip:drag-move', cursor)
+  },
+  endStripDrag(): void {
+    ipcRenderer.send('strip:drag-end')
   },
   getSettings(): Promise<AppSettings> {
     return ipcRenderer.invoke('settings:get')

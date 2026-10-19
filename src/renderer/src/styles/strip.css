@@ -16,8 +16,9 @@ html[data-view='strip'] #app {
   border-radius: 7px;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
   white-space: nowrap;
-  /* 整条可拖；它不响应点击，所以不需要给内部留 no-drag 区域 */
-  -webkit-app-region: drag;
+  /* 拖动走 pointer 事件 + 主进程跟随，不用 app-region（不抢焦点的窗口失去前台后拖不动） */
+  cursor: move;
+  touch-action: none;
 }
 
 .strip__item {

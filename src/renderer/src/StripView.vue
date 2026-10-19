@@ -29,6 +29,48 @@ function applyTextColor(settings: AppSettings | null): void {
   }
 }
 
+/*
+ * 拖动：按下时告诉主进程"光标在哪、窗口在哪"的差值，之后每帧最多发一次屏幕坐标让它摆放。
+ * 用 pointermove 的 screenX/screenY（真实屏幕坐标），不能用 movementX/clientX——窗口跟着
+ * 光标走之后那些值会被窗口位移抵消，手感变成"粘住不动"。按帧节流是因为鼠标上报频率
+ * 可能到 1000Hz，逐条发会把 IPC 灌满。
+ */
+let dragging = false
+let pendingCursor: { x: number; y: number } | null = null
+let scheduled = 0
+
+function flushDrag(): void {
+  scheduled = 0
+  if (!pendingCursor) return
+  const cursor = pendingCursor
+  pendingCursor = null
+  window.power.moveStripDrag(cursor)
+}
+
+function onPointerDown(event: PointerEvent): void {
+  if (event.button !== 0) return
+  dragging = true
+  ;(event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId)
+  window.power.beginStripDrag({ x: event.screenX, y: event.screenY })
+}
+
+function onPointerMove(event: PointerEvent): void {
+  if (!dragging) return
+  pendingCursor = { x: event.screenX, y: event.screenY }
+  if (!scheduled) scheduled = requestAnimationFrame(flushDrag)
+}
+
+function onPointerEnd(): void {
+  if (!dragging) return
+  dragging = false
+  if (scheduled) {
+    cancelAnimationFrame(scheduled)
+    scheduled = 0
+  }
+  pendingCursor = null
+  window.power.endStripDrag()
+}
+
 function tone(device: PowerDeviceReading): string {
   if (device.charging === true) return 'charge'
   if (device.percent === null) return 'unknown'
@@ -76,7 +118,15 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="root" class="strip">
+  <div
+    ref="root"
+    class="strip"
+    @pointerdown="onPointerDown"
+    @pointermove="onPointerMove"
+    @pointerup="onPointerEnd"
+    @pointercancel="onPointerEnd"
+    @lostpointercapture="onPointerEnd"
+  >
     <span
       v-for="device in devices"
       :key="device.id"

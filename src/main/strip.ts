@@ -8,6 +8,10 @@ import type { StripPosition } from '../shared/types'
  * 它不是嵌进任务栏——Windows 不允许第三方往任务栏里放自绘内容（`tray.setTitle`
  * 也只支持 macOS），所以这里是"贴在任务栏上方的一条浮窗"。位置由用户拖动决定并记住，
  * focusable:false 是为了点它时不抢走当前输入焦点。
+ *
+ * 拖动不用 `-webkit-app-region: drag`：那种拖动依赖窗口能被激活，而 focusable:false
+ * 的窗口在别的程序成为前台之后就拖不动了。也不用主进程定时轮询光标——Windows 定时器
+ * 粒度会让手感发顿。现在是渲染层把 pointermove 的屏幕坐标按帧交给主进程摆放，事件驱动。
  */
 
 const STRIP_WIDTH = 176
@@ -17,6 +21,8 @@ const MOVE_SAVE_DEBOUNCE_MS = 400
 
 let strip: BrowserWindow | null = null
 let saveTimer: NodeJS.Timeout | null = null
+let dragOffset: StripPosition | null = null
+let applyingBounds = false
 
 function loadStripContent(win: BrowserWindow): void {
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -26,23 +32,50 @@ function loadStripContent(win: BrowserWindow): void {
   }
 }
 
-// 记住的位置可能在另一块屏上（拔了显示器、换过分辨率），落到最近的工作区里再显示
-function clampPosition(position: StripPosition | null): StripPosition {
-  const area = screen.getPrimaryDisplay().workArea
-  if (position) {
-    const display = screen.getAllDisplays().find(
-      (item) =>
-        position.x >= item.workArea.x - 40 &&
-        position.x <= item.workArea.x + item.workArea.width &&
-        position.y >= item.workArea.y &&
-        position.y <= item.workArea.y + item.workArea.height
-    )
-    if (display) return position
-  }
+function areaAt(x: number, y: number) {
+  return screen.getDisplayNearestPoint({ x, y }).workArea
+}
+
+// 整条留在工作区内：拖到屏幕外就再也点不到它，等于把自己藏起来
+function clampToArea(x: number, y: number, width: number, height: number): StripPosition {
+  const area = areaAt(x + width / 2, y + height / 2)
   return {
-    x: area.x + area.width - STRIP_WIDTH - EDGE_GAP,
-    y: area.y + area.height - STRIP_HEIGHT - EDGE_GAP
+    x: Math.min(Math.max(x, area.x), area.x + area.width - width),
+    y: Math.min(Math.max(y, area.y), area.y + area.height - height)
   }
+}
+
+function setStripBounds(x: number, y: number, width: number, height: number): void {
+  if (!strip || strip.isDestroyed()) return
+  const clamped = clampToArea(x, y, width, height)
+  applyingBounds = true
+  strip.setBounds({ ...clamped, width, height }, false)
+  applyingBounds = false
+}
+
+function persistPosition(): void {
+  if (!strip || strip.isDestroyed() || !movedHandler) return
+  const [x, y] = strip.getPosition()
+  movedHandler({ x, y })
+}
+
+let movedHandler: ((position: StripPosition) => void) | null = null
+
+export function beginStripDrag(cursor: StripPosition): void {
+  if (!strip || strip.isDestroyed()) return
+  const [x, y] = strip.getPosition()
+  dragOffset = { x: cursor.x - x, y: cursor.y - y }
+}
+
+export function moveStripDrag(cursor: StripPosition): void {
+  if (!strip || strip.isDestroyed() || !dragOffset) return
+  const { width, height } = strip.getBounds()
+  setStripBounds(cursor.x - dragOffset.x, cursor.y - dragOffset.y, width, height)
+}
+
+export function endStripDrag(): void {
+  dragOffset = null
+  persistPosition()
 }
 
 export function syncStrip(options: {
@@ -50,7 +83,10 @@ export function syncStrip(options: {
   position: StripPosition | null
   onMoved: (position: StripPosition) => void
 }): void {
+  movedHandler = options.onMoved
+
   if (!options.visible) {
+    dragOffset = null
     strip?.destroy()
     strip = null
     return
@@ -84,16 +120,15 @@ export function syncStrip(options: {
     strip.setMenu(null)
     strip.setAlwaysOnTop(true, 'screen-saver')
 
-    let pending: NodeJS.Timeout | null = null
     strip.on('moved', () => {
-      if (!strip || saveTimer === pending) return
-      if (pending) clearTimeout(pending)
-      pending = setTimeout(() => {
-        if (!strip || strip.isDestroyed()) return
-        const [x, y] = strip.getPosition()
-        options.onMoved({ x, y })
-      }, MOVE_SAVE_DEBOUNCE_MS)
-      saveTimer = pending
+      if (applyingBounds) return
+      const bounds = strip?.getBounds()
+      if (!bounds || !strip) return
+      const clamped = clampToArea(bounds.x, bounds.y, bounds.width, bounds.height)
+      if (clamped.x !== bounds.x || clamped.y !== bounds.y) setStripBounds(clamped.x, clamped.y, bounds.width, bounds.height)
+
+      if (saveTimer) clearTimeout(saveTimer)
+      saveTimer = setTimeout(persistPosition, MOVE_SAVE_DEBOUNCE_MS)
     })
 
     strip.on('closed', () => {
@@ -103,26 +138,34 @@ export function syncStrip(options: {
     loadStripContent(strip)
   }
 
-  const position = clampPosition(options.position)
-  strip.setBounds({ ...position, width: STRIP_WIDTH, height: STRIP_HEIGHT }, false)
+  const start = clampToArea(
+    options.position?.x ?? 0,
+    options.position?.y ?? 0,
+    strip.getBounds().width,
+    strip.getBounds().height
+  )
+  const fallback = areaAt(start.x, start.y)
+  const position = options.position
+    ? start
+    : {
+        x: fallback.x + fallback.width - strip.getBounds().width - EDGE_GAP,
+        y: fallback.y + fallback.height - strip.getBounds().height - EDGE_GAP
+      }
+
+  strip.setBounds({ ...position, width: strip.getBounds().width, height: strip.getBounds().height }, false)
   if (!strip.isVisible()) strip.show()
 }
 
 export function resizeStrip(width: number, height: number): void {
   if (!strip || strip.isDestroyed()) return
-  const [x, y] = strip.getPosition()
-  strip.setBounds(
-    {
-      x,
-      y,
-      width: Math.max(80, Math.min(Math.round(width), 480)),
-      height: Math.max(24, Math.min(Math.round(height), 80))
-    },
-    false
-  )
+  const bounds = strip.getBounds()
+  const nextWidth = Math.max(80, Math.min(Math.round(width), 480))
+  const nextHeight = Math.max(24, Math.min(Math.round(height), 80))
+  setStripBounds(bounds.x, bounds.y, nextWidth, nextHeight)
 }
 
 export function destroyStrip(): void {
+  dragOffset = null
   strip?.destroy()
   strip = null
 }
