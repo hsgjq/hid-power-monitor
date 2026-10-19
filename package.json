@@ -1,0 +1,33 @@
+{
+  "name": "hid-power-monitor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Windows tray utility for 2.4G wireless mouse and keyboard battery levels",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "probe": "tsx scripts/hid-probe.ts",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
+    "typecheck:web": "vue-tsc --noEmit -p tsconfig.web.json --composite false",
+    "typecheck": "pnpm run typecheck:node && pnpm run typecheck:web"
+  },
+  "dependencies": {
+    "node-hid": "^3.4.0",
+    "vue": "^3.5.44"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "@vitejs/plugin-vue": "^6.0.10",
+    "electron": "^44.9.0",
+    "electron-vite": "^6.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.4",
+    "vue-tsc": "^3.3.13"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["electron", "esbuild", "node-hid"]
+  }
+}
