@@ -176,7 +176,7 @@ onMounted(async () => {
     <li v-if="settings.stripVisible" class="setting">
       <div>
         <p class="setting__label">浮条文字颜色</p>
-        <p class="setting__hint">低电与充电仍用状态色</p>
+        <p class="setting__hint">低电与充电会另显示图标</p>
       </div>
       <div class="setting__side">
         <button

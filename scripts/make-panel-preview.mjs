@@ -82,7 +82,7 @@ const settingsColor = `<ul class="settings">
     <input class="switch" type="checkbox" role="switch" aria-label="桌面浮条" checked />
   </li>
   <li class="setting">
-    <div><p class="setting__label">浮条文字颜色</p><p class="setting__hint">低电与充电仍用状态色</p></div>
+    <div><p class="setting__label">浮条文字颜色</p><p class="setting__hint">低电与充电会另显示图标</p></div>
     <div class="setting__side">
       <button class="action" type="button">默认</button>
       <input class="swatch" type="color" value="#ffd166" aria-label="浮条文字颜色" />
@@ -171,22 +171,33 @@ const devicesFoot = `<button class="action">刷新</button><button class="action
 const settingsFoot = `<button class="action">返回</button><span class="spacer"></span><button class="action">收起</button><button class="action action--danger">退出</button>`
 const stamp = `<span class="flyout__stamp">22:41</span>`
 
-const stripShot = `<div class="shot">
-  <p class="shot__label">浮条 · 自定义文字色 #ffd166（四种状态）</p>
-  <div class="stripwrap"><div class="strip" style="--strip-text:#ffd166">
+const stripBolt = `<svg class="strip__mark" width="8" height="11" viewBox="0 0 9 12" fill="currentColor"><path d="M5.8 0 .8 6.9h2.6L3 12l5-6.9H5.4z"/></svg>`
+const stripWarn = `<svg class="strip__mark" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M6 1.4 11 10.4H1z"/><path d="M6 4.8v2.4M6 9.1h.01"/></svg>`
+
+function stripShot(textColor, caption) {
+  return `<div class="shot">
+  <p class="shot__label">${caption}</p>
+  <div class="stripwrap"><div class="strip" style="--strip-text:${textColor}">
     <span class="strip__item" data-tone="normal">${mouseIcon}<span class="strip__value">51<span class="strip__unit">%</span></span></span>
-    <span class="strip__item" data-tone="charge">${keyboardIcon}<span class="strip__value">67<span class="strip__unit">%</span></span></span>
-    <span class="strip__item" data-tone="low">${mouseIcon}<span class="strip__value">12<span class="strip__unit">%</span></span></span>
+    <span class="strip__item" data-tone="charge">${keyboardIcon}${stripBolt}<span class="strip__value">67<span class="strip__unit">%</span></span></span>
+    <span class="strip__item" data-tone="low">${mouseIcon}${stripWarn}<span class="strip__value">12<span class="strip__unit">%</span></span></span>
     <span class="strip__item" data-tone="unknown">${mouseIcon}<span class="strip__value">--<span class="strip__unit">%</span></span></span>
   </div></div>
 </div>`
+}
+
+const stripShots = [
+  stripShot('#ffd166', '浮条 · 自定义文字色 #ffd166（四种状态）'),
+  // 挑的颜色正好等于低电状态色：读数分不开，只能靠闪电/警告这两个形状
+  stripShot('#f2a79f', '浮条 · 挑色撞车 #f2a79f（与低电状态色同值）')
+].join('')
 
 const shots = [
   panel({ title: '设备视图', stamp, body: devicesBody, foot: devicesFoot }),
   panel({ title: '设备视图 · 充电中 + 未识别', stamp: '', body: devicesCharging, foot: devicesFoot }),
   panel({ title: '设置视图 · 含浮条颜色', stamp: '', body: settingsColor, foot: settingsFoot }),
   panel({ title: '设置视图 · 展开诊断', stamp: '', body: settingsDiag, foot: settingsFoot }),
-  stripShot
+  stripShots
 ].join('')
 
 const html = `<!doctype html>

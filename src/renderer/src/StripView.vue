@@ -141,6 +141,36 @@ onBeforeUnmount(() => {
       :title="label(device)"
     >
       <DeviceIcon :kind="device.kind" :size="13" />
+      <!--
+        异常状态先靠形状、再靠颜色：自定义文字色可能正好撞上某个状态色
+        （例如挑了 #f2a79f，低电就与正常同色），只换颜色会看不出状态变了。
+      -->
+      <svg
+        v-if="device.charging === true"
+        class="strip__mark"
+        width="8"
+        height="11"
+        viewBox="0 0 9 12"
+        fill="currentColor"
+        aria-hidden="true"
+      >
+        <path d="M5.8 0 .8 6.9h2.6L3 12l5-6.9H5.4z" />
+      </svg>
+      <svg
+        v-else-if="device.percent !== null && device.percent <= 20"
+        class="strip__mark"
+        width="11"
+        height="11"
+        viewBox="0 0 12 12"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.2"
+        stroke-linecap="round"
+        aria-hidden="true"
+      >
+        <path d="M6 1.4 11 10.4H1z" />
+        <path d="M6 4.8v2.4M6 9.1h.01" />
+      </svg>
       <span class="strip__value">
         {{ device.percent === null ? '--' : device.percent }}<span class="strip__unit">%</span>
       </span>

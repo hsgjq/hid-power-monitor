@@ -29,9 +29,16 @@ html[data-view='strip'] #app {
 }
 
 /*
+ * 状态标记（充电闪电 / 低电警告）。用 currentColor 吃各自的状态色，
+ * flex:none 是不让它在窄窗口里被压扁——被压扁后形状认不出来，等于状态又只剩颜色。
+ */
+.strip__mark {
+  flex: none;
+}
+
+/*
  * --strip-text 由用户设置注入（StripView 写在 documentElement 上）。
- * 只影响正常读数的颜色：低电、充电、无读数仍走状态色，
- * 否则一个自定义颜色会把"该提醒的异常"抹平。
+ * 只影响读数本身：低电、充电、无读数不靠它表达，见下面 .strip__mark。
  */
 .strip__value {
   font-size: 14px;
