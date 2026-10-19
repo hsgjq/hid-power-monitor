@@ -91,14 +91,16 @@ export function measureMchoseKeyboard(group: HidDeviceGroup): DeviceMeasurement 
     (wireless ? readWireless(wireless.path) : null) ?? (wired ? readWired(wired.path) : null)
 
   const percent = payload && payload[0] >= 1 && payload[0] <= 100 ? payload[0] : null
+  // byte1 高 4 位是充电位：插线实测 flags=0x10（高 1 低 0），不充电时是 0x01（高 0 低 1）。
+  // 之前按"高半字节=满电、低半字节=充电"拆过一版，方向是反的，别照那个改回去。
+  // 与鼠标不同，键盘充电时照样上报真实电量，所以这里不需要把 percent 置空。
+  const charging = payload ? ((payload[1] >> 4) & 0x0f) !== 0 : null
 
   return {
     link: wireless && percent !== null ? '2.4g' : wired ? 'wired' : 'unknown',
     status: percent !== null ? 'ok' : 'error',
     percent,
-    // 响应 byte1 的 flags 低 4 位在不充电时也是 1，含义没验出来之前不当充电状态用，
-    // 宁可一直显示"未知"，也不要在没插线的时候亮充电图标
-    charging: null,
+    charging,
     model: null,
     note: percent !== null ? null : '接收器没有响应电量查询',
     updatedAt: percent !== null ? new Date().toISOString() : null
