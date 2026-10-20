@@ -1,5 +1,4 @@
-import { app, BrowserWindow, screen } from 'electron'
-import { appendFileSync } from 'node:fs'
+import { BrowserWindow, screen } from 'electron'
 import { join } from 'node:path'
 import type { StripPosition } from '../shared/types'
 
@@ -49,7 +48,6 @@ function clampToArea(x: number, y: number, width: number, height: number): Strip
 function setStripBounds(x: number, y: number, width: number, height: number): void {
   if (!strip || strip.isDestroyed()) return
   const clamped = clampToArea(x, y, width, height)
-  if (clamped.x !== x || clamped.y !== y) clampedCount += 1
   applyingBounds = true
   strip.setBounds({ ...clamped, width, height }, false)
   applyingBounds = false
@@ -64,55 +62,30 @@ function persistPosition(): void {
 let movedHandler: ((position: StripPosition) => void) | null = null
 
 /*
- * 只在未打包时记一条拖动会话日志（userData/drag.log），用来分辨锁屏解锁后到底是哪一环断的：
- * 渲染层没把 pointerdown 送过来 → 文件里连 drag-begin 都没有；
- * 送过来了但主进程没有偏移量 → 会看到 drag-move-dropped；
- * 两边都正常却摆不动 → 看 applied 和 bounds 是否一致。
- * 每次拖动只写一行，不是每条鼠标事件都写。
+ * 浮条的尺寸由渲染层量完内容回传（resizeStrip），这里记住最后一次的真实尺寸：
+ * 解锁重建要用它开新窗，否则会先按默认 176×34 显示一下再跳成实际大小。
  */
-let moves = 0
-let dropped = 0
-let clampedCount = 0
-let loggedDrop = false
+let lastSize = { width: STRIP_WIDTH, height: STRIP_HEIGHT }
 
-function dragLog(line: string): void {
-  if (app.isPackaged) return
-  try {
-    appendFileSync(join(app.getPath('userData'), 'drag.log'), `${new Date().toISOString()} ${line}\n`, 'utf8')
-  } catch {
-    // 日志写不进不影响功能
-  }
+function clearSaveTimer(): void {
+  if (!saveTimer) return
+  clearTimeout(saveTimer)
+  saveTimer = null
 }
 
 export function beginStripDrag(cursor: StripPosition): void {
   if (!strip || strip.isDestroyed()) return
   const [x, y] = strip.getPosition()
   dragOffset = { x: cursor.x - x, y: cursor.y - y }
-  moves = 0
-  dropped = 0
-  clampedCount = 0
-  loggedDrop = false
-  dragLog(`begin cursor=(${cursor.x},${cursor.y}) pos=(${x},${y})`)
 }
 
 export function moveStripDrag(cursor: StripPosition): void {
-  if (!strip || strip.isDestroyed()) return
-  if (!dragOffset) {
-    dropped += 1
-    if (!loggedDrop) {
-      loggedDrop = true
-      dragLog(`drag-move-dropped cursor=(${cursor.x},${cursor.y}) 没有按下时的偏移量`)
-    }
-    return
-  }
-  moves += 1
+  if (!strip || strip.isDestroyed() || !dragOffset) return
   const { width, height } = strip.getBounds()
   setStripBounds(cursor.x - dragOffset.x, cursor.y - dragOffset.y, width, height)
 }
 
 export function endStripDrag(): void {
-  const bounds = strip && !strip.isDestroyed() ? strip.getBounds() : null
-  dragLog(`end moves=${moves} dropped=${dropped} clamped=${clampedCount} bounds=${bounds ? `(${bounds.x},${bounds.y})` : 'gone'}`)
   dragOffset = null
   persistPosition()
 }
@@ -133,6 +106,7 @@ export function syncStrip(options: SyncOptions): void {
 
   if (!options.visible) {
     dragOffset = null
+    clearSaveTimer()
     strip?.destroy()
     strip = null
     return
@@ -140,8 +114,8 @@ export function syncStrip(options: SyncOptions): void {
 
   if (!strip || strip.isDestroyed()) {
     strip = new BrowserWindow({
-      width: STRIP_WIDTH,
-      height: STRIP_HEIGHT,
+      width: lastSize.width,
+      height: lastSize.height,
       show: false,
       frame: false,
       transparent: true,
@@ -178,19 +152,10 @@ export function syncStrip(options: SyncOptions): void {
     })
 
     strip.on('closed', () => {
+      // 窗口没了就不该再有落盘动作：那次 400ms 的防抖定时器得清掉
+      clearSaveTimer()
       strip = null
     })
-
-    // 渲染进程僵死/崩掉这两件事在日志里必须留下痕迹，不然锁屏那种"界面还在但没反应"没法归因
-    strip.on('unresponsive', () => dragLog('event unresponsive'))
-    strip.on('responsive', () => dragLog('event responsive'))
-    strip.webContents.on('render-process-gone', (_event, details) =>
-      dragLog(`event render-process-gone reason=${details.reason} exit=${details.exitCode}`)
-    )
-    strip.webContents.on('did-fail-load', (_event, code, text) =>
-      dragLog(`event did-fail-load ${code} ${text}`)
-    )
-    strip.webContents.on('destroyed', () => dragLog('event web-contents-destroyed'))
 
     loadStripContent(strip)
   }
@@ -218,6 +183,7 @@ export function resizeStrip(width: number, height: number): void {
   const bounds = strip.getBounds()
   const nextWidth = Math.max(80, Math.min(Math.round(width), 480))
   const nextHeight = Math.max(24, Math.min(Math.round(height), 80))
+  lastSize = { width: nextWidth, height: nextHeight }
   setStripBounds(bounds.x, bounds.y, nextWidth, nextHeight)
 }
 
@@ -258,12 +224,11 @@ export function refreshStripAfterUnlock(): void {
   lastRefreshAt = now
 
   const bounds = strip.getBounds()
-  dragLog(
-    `unlock visible=${strip.isVisible()} loading=${strip.webContents.isLoading()} bounds=(${bounds.x},${bounds.y},${bounds.width},${bounds.height})`
-  )
 
-  // 先记住当前坐标，销毁后按同一坐标重建，位置不会跳
+  // 先记住当前坐标和尺寸，销毁后按同一份参数重建，位置和大小都不会跳
   const options = { ...lastSync, position: { x: bounds.x, y: bounds.y } }
+  lastSize = { width: bounds.width, height: bounds.height }
+  clearSaveTimer()
   dragOffset = null
   strip.destroy()
   syncStrip(options)
@@ -271,6 +236,7 @@ export function refreshStripAfterUnlock(): void {
 
 export function destroyStrip(): void {
   dragOffset = null
+  clearSaveTimer()
   strip?.destroy()
   strip = null
 }
