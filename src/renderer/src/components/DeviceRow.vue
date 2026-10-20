@@ -30,8 +30,8 @@ const meta = computed(() => {
 
   const time = timeOf(reading.updatedAt)
   const parts = [LINK_LABEL[reading.link]]
-  // 型号和"充电中"二选一，两个都上副标题会挤不下
-  if (reading.charging === true) parts.push('充电中')
+  // 型号和充电状态二选一，两个都上副标题会挤不下；"已充满"只有设备自己说了才写
+  if (reading.charging === true) parts.push(reading.chargeLevel === 'full' ? '已充满' : '充电中')
   else if (reading.model) parts.push(reading.model)
   if (time) parts.push(reading.stale ? `上次 ${time}` : time)
   return parts.join(' · ')

@@ -87,7 +87,14 @@ export function drawBatteryIcon(
 function formatTooltip(snapshot: PowerSnapshot): string {
   const parts = snapshot.devices.map((device) => {
     const value = device.percent === null ? '--' : `${device.percent}%`
-    const flag = device.charging === true ? ' 充电中' : device.stale ? ' 上次读数' : ''
+    const flag =
+      device.charging === true
+        ? device.chargeLevel === 'full'
+          ? ' 已充满'
+          : ' 充电中'
+        : device.stale
+          ? ' 上次读数'
+          : ''
     return `${device.brand}${device.name.replace('无线', '')} ${value}${flag}`
   })
   return `2.4G 设备电量  ${parts.join('  |  ')}`

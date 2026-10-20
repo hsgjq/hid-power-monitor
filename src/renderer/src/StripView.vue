@@ -103,9 +103,21 @@ function tone(device: PowerDeviceReading): string {
   return 'normal'
 }
 
+/*
+ * 浮条上"充电中"这一档不写数字：那时设备根本没在报电量，那一格数是沿用接入前的旧值，
+ * 而浮条没有地方解释"这是上次的"，写个数就会被当即时电量——正是之前那个"在充电却显示 100%"
+ * 被误读成"充满了"的原因。已充满（设备当场报的 100）不一样，照写。
+ */
+function showPercent(device: PowerDeviceReading): boolean {
+  return device.percent !== null && !(device.charging === true && device.stale)
+}
+
 function label(device: PowerDeviceReading): string {
   const name = [device.brand, device.name].filter(Boolean).join(' ')
-  if (device.charging === true) return `${name} 充电中`
+  if (device.charging === true) {
+    if (device.chargeLevel === 'full') return `${name} 已充满 ${device.percent ?? '--'}%`
+    return `${name} 充电中${device.percent === null ? '' : `（接入前 ${device.percent}%）`}`
+  }
   if (device.percent === null) return `${name} ${device.note ?? '暂无读数'}`
   return `${name} ${device.percent}%${device.stale ? '（上次读数）' : ''}`
 }
@@ -191,8 +203,12 @@ onBeforeUnmount(() => {
         <path d="M6 1.4 11 10.4H1z" />
         <path d="M6 4.8v2.4M6 9.1h.01" />
       </svg>
-      <span class="strip__value">
-        {{ device.percent === null ? '--' : device.percent }}<span class="strip__unit">%</span>
+      <span v-if="showPercent(device)" class="strip__value">
+        {{ device.percent }}<span class="strip__unit">%</span>
+      </span>
+      <!-- 充电中且不写数时就只剩图标加闪电；"没读到"仍然给 --，两种情况要看得出区别 -->
+      <span v-else-if="device.charging !== true" class="strip__value">
+        --<span class="strip__unit">%</span>
       </span>
     </span>
 
