@@ -28,6 +28,13 @@ if (!gotLock) {
   app.quit()
 }
 
+/*
+ * 低电量提示音由面板窗口用 Web Audio 合成，而面板平时是隐藏窗口、用户从没点过它。
+ * Chromium 默认把这种页面的音频锁在"首次用户手势"之后，第一声就哑掉了。这个开关要在
+ * app ready 之前设，设晚了不生效。
+ */
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
+
 let flyout: BrowserWindow | null = null
 let tray: ReturnType<typeof createTray> | null = null
 let last: PowerSnapshot | null = null
