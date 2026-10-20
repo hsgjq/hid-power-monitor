@@ -118,8 +118,12 @@ export function measureMchoseKeyboard(group: HidDeviceGroup): DeviceMeasurement 
   const wireless = list.find((item) => item.usagePage === 0xff02)
   const wired = list.find((item) => item.usagePage === 0xff04)
 
-  const payload =
-    (wireless ? readWireless(wireless.path) : null) ?? (wired ? readWired(wired.path) : null)
+  // 有线那条用的是 sendFeatureReport（HidD_SetFeature 形态），属于写操作，所以只在
+  // 这个接收器**没有**无线端点时才走它。之前拿它当"无线读空"的兜底，会把插在 2.4G 上
+  // 的键盘在某一轮标成"有线"，也平白多了一次对设备的写入。
+  const fromWireless = wireless ? readWireless(wireless.path) : null
+  const fromWired = !wireless && wired ? readWired(wired.path) : null
+  const payload = fromWireless ?? fromWired
 
   const percent = payload && payload[0] >= 1 && payload[0] <= 100 ? payload[0] : null
   // byte1 高 4 位是充电位：插线实测 flags=0x10（高 1 低 0），不充电时是 0x01（高 0 低 1）。
@@ -128,7 +132,7 @@ export function measureMchoseKeyboard(group: HidDeviceGroup): DeviceMeasurement 
   const charging = payload ? ((payload[1] >> 4) & 0x0f) !== 0 : null
 
   return {
-    link: wireless && percent !== null ? '2.4g' : wired ? 'wired' : 'unknown',
+    link: fromWireless ? '2.4g' : fromWired ? 'wired' : 'unknown',
     status: percent !== null ? 'ok' : 'error',
     percent,
     charging,
