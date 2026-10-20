@@ -67,6 +67,7 @@ export function loadSettings(): AppSettings {
 
 export function saveSettings(patch: Partial<AppSettings>): AppSettings {
   const next = loadSettings()
+  const autoLaunchBefore = next.autoLaunch
   if (typeof patch.autoLaunch === 'boolean') next.autoLaunch = patch.autoLaunch
   if (typeof patch.soundAlert === 'boolean') next.soundAlert = patch.soundAlert
   if (typeof patch.stripVisible === 'boolean') next.stripVisible = patch.stripVisible
@@ -82,7 +83,9 @@ export function saveSettings(patch: Partial<AppSettings>): AppSettings {
   } catch {
     // 写不进磁盘时仍按内存里的值运行，下次启动回到上次落盘的配置
   }
-  applyLoginItem(next.autoLaunch)
+  // 只在开关真的变了才碰注册表：拖动浮条也会走这里落盘（松手一次、防抖再一次），
+  // 无条件同步的话每拖一次就 setLoginItemSettings 一遍
+  if (next.autoLaunch !== autoLaunchBefore) applyLoginItem(next.autoLaunch)
   return next
 }
 
