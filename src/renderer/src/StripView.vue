@@ -4,7 +4,7 @@ import type { AppSettings, PowerDeviceReading, PowerSnapshot } from '@shared/typ
 import DeviceIcon from './components/DeviceIcon.vue'
 
 /*
- * 桌面浮条：整条可拖（app-region: drag），只读不响应点击。
+ * 桌面浮条：整条可拖（pointer 事件 + 主进程按坐标摆窗），只读不响应点击。
  *
  * 尺寸不写死：内容宽度取决于当前插着几台设备，所以量完自身尺寸回传给主进程改窗口。
  * 一台设备都没有时也保留这一条并显示 --，不让它凭空消失——浮条突然没了会被当成程序挂了。
@@ -80,6 +80,12 @@ function onPointerDown(event: PointerEvent): void {
 
 function onPointerMove(event: PointerEvent): void {
   if (!dragging) return
+  // 键没按着就说明这次拖动早就结束了：指针捕获没成功时，鼠标在浮条外松开我们收不到 up，
+  // 少了这道判断，松开后光是划过浮条就会把它拖着走
+  if ((event.buttons & 1) === 0) {
+    onPointerEnd()
+    return
+  }
   sendMove({ x: event.screenX, y: event.screenY }, false)
 }
 
