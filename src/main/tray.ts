@@ -1,6 +1,6 @@
 import { Menu, Tray, nativeImage } from 'electron'
 import type { NativeImage } from 'electron'
-import type { PowerSnapshot } from '../shared/types'
+import type { PowerDeviceReading, PowerSnapshot } from '../shared/types'
 
 /*
  * 托盘图标不放静态资源：按两台设备里较低的那块电量逐像素画一张 32x32 BGRA 位图。
@@ -54,7 +54,8 @@ function ring(buf: Buffer, x0: number, y0: number, x1: number, y1: number, color
 export function drawBatteryIcon(
   percent: number | null,
   charging: boolean,
-  lowAt: number
+  lowAt: number,
+  stale = false
 ): NativeImage {
   const buf = Buffer.alloc(SIZE * SIZE * 4)
 
@@ -69,9 +70,15 @@ export function drawBatteryIcon(
   if (percent !== null) {
     const innerWidth = 24 - 4 - 2
     const filled = Math.max(1, Math.round((innerWidth * Math.min(100, Math.max(0, percent))) / 100))
-    // 低电分界用用户在设置里调的那个值；<=0 是"关闭提醒"，这时不该有任何东西标红
-    const color = charging ? CHARGING : lowAt > 0 && percent <= lowAt ? LOW : LIGHT
-    fill(buf, 6, 13, 6 + filled - 1, 20, color, 255)
+    /*
+     * 充电优先于"这轮没读到"，和面板、浮条同一口径：那截数字是沿用的，但充电这件事
+     * 是设备当场报的。剩下两种状态色只认真读数，沿用旧值时把填充画暗一档就够了。
+     * 低电分界用用户在设置里调的那个值；lowAt <= 0 是"关闭提醒"，这时不标红。
+     */
+    let color = LIGHT
+    if (charging) color = CHARGING
+    else if (!stale && lowAt > 0 && percent <= lowAt) color = LOW
+    fill(buf, 6, 13, 6 + filled - 1, 20, color, charging || !stale ? 255 : 120)
   }
 
   return nativeImage.createFromBitmap(buf, { width: SIZE, height: SIZE })
@@ -80,7 +87,8 @@ export function drawBatteryIcon(
 function formatTooltip(snapshot: PowerSnapshot): string {
   const parts = snapshot.devices.map((device) => {
     const value = device.percent === null ? '--' : `${device.percent}%`
-    return `${device.brand}${device.name.replace('无线', '')} ${value}`
+    const flag = device.charging === true ? ' 充电中' : device.stale ? ' 上次读数' : ''
+    return `${device.brand}${device.name.replace('无线', '')} ${value}${flag}`
   })
   return `2.4G 设备电量  ${parts.join('  |  ')}`
 }
@@ -106,17 +114,28 @@ export function createTray(
   return tray
 }
 
+/*
+ * 图标只能表达一块电池，取有读数里最低的那块；返回的是设备本身而不是一个百分比，
+ * 因为"充电/低电/旧值"这三个标记必须跟这一块自己的状态走。
+ */
+function lowestDevice(devices: PowerDeviceReading[]): PowerDeviceReading | null {
+  let lowest: PowerDeviceReading | null = null
+  for (const device of devices) {
+    if (device.percent === null) continue
+    if (lowest === null || device.percent < (lowest.percent ?? Infinity)) lowest = device
+  }
+  return lowest
+}
+
 export function applySnapshotToTray(
   tray: Tray,
   snapshot: PowerSnapshot,
   lowAt: number
 ): void {
-  const known = snapshot.devices.filter((device) => device.percent !== null)
-  const worst = known.reduce<number | null>((acc, device) => {
-    if (device.percent === null) return acc
-    return acc === null ? device.percent : Math.min(acc, device.percent)
-  }, null)
-  const charging = known.some((device) => device.charging === true)
-  tray.setImage(drawBatteryIcon(worst, charging, lowAt))
+  const worst = lowestDevice(snapshot.devices)
+
+  tray.setImage(
+    drawBatteryIcon(worst?.percent ?? null, worst?.charging === true, lowAt, worst?.stale === true)
+  )
   tray.setToolTip(formatTooltip(snapshot))
 }
