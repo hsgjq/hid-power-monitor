@@ -23,12 +23,32 @@ function endpoints(group: HidDeviceGroup): HidInterfaceInfo[] {
   )
 }
 
-function mergeWireless(reports: number[][]): number[] {
-  const payload: number[] = []
+/*
+ * 拼分片，并把"没收齐"直接判成读不到。半截载荷里第 2 个字节可能是别的数据，
+ * 拿它当充电位就会凭空判成"充电中"——那一项的颜色会被充电状态色接管，不再吃用户设置的
+ * 文字色，看起来像"颜色设置偶尔失灵"。宁可这一轮没有读数（界面沿用上一次真值并标灰），
+ * 也不给出一个像是真的的错数。
+ */
+export function mergeWireless(reports: number[][]): number[] | null {
+  const fragments = new Map<number, number[]>()
+  let declared = 0
+
   for (const report of reports) {
     const data = report[0] === WIRELESS_REPORT_ID ? report.slice(1) : report
     if (data.length < 6 || data[0] !== WIRELESS_COMMAND) continue
-    payload.push(...data.slice(4, -1))
+    declared = data[1]
+    fragments.set(data[2], data.slice(4, -1))
+  }
+
+  if (declared < 1 || fragments.size !== declared) return null
+
+  // 帧号从几开始取决于设备，按最小号连续排；中间缺任何一片都算没读齐
+  const first = Math.min(...fragments.keys())
+  const payload: number[] = []
+  for (let i = 0; i < declared; i += 1) {
+    const part = fragments.get(first + i)
+    if (!part) return null
+    payload.push(...part)
   }
   return payload
 }
@@ -65,7 +85,7 @@ function readWireless(path: string): number[] | null {
       reports.push(report)
     }
     const payload = mergeWireless(reports)
-    return payload.length >= 2 ? payload : null
+    return payload && payload.length >= 2 ? payload : null
   } catch {
     return null
   } finally {
