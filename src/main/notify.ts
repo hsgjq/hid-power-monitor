@@ -33,6 +33,9 @@ export function checkLowBattery(snapshot: PowerSnapshot, onOpen: () => void): vo
 
   for (const device of snapshot.devices) {
     if (device.percent === null) continue
+    // 沿用上一次真值的读数不参与提醒：那数字已经不作数了，拿它弹"记得充电"就是拿旧数据误报。
+    // 这里 continue 而不是 else 分支，所以提醒的重新武装只由真读数决定
+    if (device.stale) continue
 
     if (device.percent <= lowBatteryPercent) {
       if (alerted.has(device.id)) continue
