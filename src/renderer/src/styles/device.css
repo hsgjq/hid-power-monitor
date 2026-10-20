@@ -74,13 +74,6 @@
   color: var(--text-muted);
 }
 
-.device[data-state='absent'],
-.device[data-state='absent'] .device__glyph,
-.device[data-state='absent'] .device__value,
-.device[data-state='absent'] .device__meta {
-  color: var(--text-faint);
-}
-
 .device[data-state='low'] .device__value {
   color: var(--fill-low-text);
 }

@@ -71,7 +71,7 @@ export interface FeatureProbeResult {
 
 export type DeviceLink = '2.4g' | 'wired' | 'unknown'
 
-export type ReadingStatus = 'ok' | 'absent' | 'unsupported' | 'error'
+export type ReadingStatus = 'ok' | 'unsupported' | 'error'
 
 export interface DeviceMeasurement {
   link: DeviceLink

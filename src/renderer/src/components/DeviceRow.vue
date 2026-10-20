@@ -16,7 +16,6 @@ const title = computed(() => [props.reading.brand, props.reading.name].filter(Bo
 
 const state = computed(() => {
   const reading = props.reading
-  if (reading.status === 'absent') return 'absent'
   // 充电优先于"没有读数"：这时数字是 service 补的接入前真值，不是空值
   if (reading.charging === true) return 'charging'
   if (reading.percent === null) return 'unsupported'
