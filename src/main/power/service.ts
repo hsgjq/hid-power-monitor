@@ -33,7 +33,15 @@ function withCache(reading: PowerDeviceReading): PowerDeviceReading {
   if (!needsFallback) return reading
 
   if (reading.charging === true) {
-    return { ...previous, ...reading, percent: previous.percent, charging: true, stale: true }
+    // 充电期间设备不给电量，这里补的是接入前那次的真值。数字和它自己的时间要一起沿用：
+    // 只换数字不换时间，界面就会把"一小时前读到的数"演成"刚刚读到的"。
+    return {
+      ...reading,
+      percent: previous.percent,
+      updatedAt: previous.updatedAt,
+      charging: true,
+      stale: true
+    }
   }
   return { ...previous, stale: true }
 }

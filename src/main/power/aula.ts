@@ -1,5 +1,5 @@
 import { HID } from 'node-hid'
-import type { DeviceMeasurement, HidDeviceGroup } from '../../shared/types'
+import type { ChargeLevel, DeviceMeasurement, HidDeviceGroup } from '../../shared/types'
 
 /*
  * 狼蛛 SC580（接收器 248A:5B2F，泰凌方案公模 dongle）的电量读取。
@@ -11,6 +11,9 @@ import type { DeviceMeasurement, HidDeviceGroup } from '../../shared/types'
  *
  * 只允许发 0x20 这一种帧。0x01/0x02/0x03/0x0f 是写配置（回 ack=01 空载荷就是
  * 写入成功），曾经把设备的按键映射和回报率写坏过，别再往那些命令号上发东西。
+ *
+ * 读到的其实是接收器里缓存的最后一帧：插拔之后设备自己也要 20~60 秒才把新状态推上来
+ * （实测 20 / 24 / 58 秒各一次），所以帧内容没变就不该把时间戳往前推。
  */
 
 const REPORT_ID = 12
@@ -20,12 +23,16 @@ const BATTERY_OFFSET = 18
 const CHARGING_OFFSET = 19
 const MODEL_OFFSET = 8
 const MODEL_LENGTH = 8
+const SEQ_OFFSET = 4
 
 /*
- * 充电时固件把电量字节钉成 100（占位值，不是"充满了"），其余 26 个字节一个不动，
- * 所以充电期间设备实际上不上报电量。厂商驱动那段时间放的是一段装饰动画，也不是数据。
+ * 充电位（idx19）实测是三个值，跟上面那些命令号没关系（18:39~19:42 连着做了三次插拔采出来的）：
+ * 0 = 没插电，1 = 正在充电，2 = 插着且已经充满。
+ * 1 的时候电量位被钉死成 100（三帧全是 1+100，从没给过别的数），这段时间设备其实不上报电量；
+ * 2 的时候 100 是当场真值——拔掉之后它照样报 100，因为电池确实是满的，所以不能把 100 一律当假。
  */
-const CHARGING_PLACEHOLDER = 100
+const CHARGE_NONE = 0
+const CHARGE_FULL = 2
 
 let seq = 0
 
@@ -70,7 +77,9 @@ function readModel(block: Buffer): string | null {
 export interface AulaInfoBlock {
   percent: number | null
   charging: boolean
+  level: ChargeLevel | null
   model: string
+  at: string
 }
 
 /*
@@ -78,7 +87,7 @@ export interface AulaInfoBlock {
  * 设备不响应时 GetFeature 会把我们刚写进去的那 33 个字节原样吐回来（后段全 0），
  * 只看命令字节位是拦不住它的——那一位是我们自己写的，漏判就会显示成 0%。
  */
-export function parseInfoBlock(block: Buffer): AulaInfoBlock | null {
+export function parseInfoBlock(block: Buffer): Omit<AulaInfoBlock, 'at'> | null {
   if (block.length < REPORT_LENGTH) return null
   const model = readModel(block)
   if (!model) return null
@@ -87,11 +96,38 @@ export function parseInfoBlock(block: Buffer): AulaInfoBlock | null {
   // 0 是合法读数（电量真见底了），不能和"没读到"混成一堆；冒牌帧由上面的型号串拦掉
   if (raw > 100) return null
 
+  const charge = block[CHARGING_OFFSET]
   return {
-    charging: block[CHARGING_OFFSET] === 1,
-    percent: raw === CHARGING_PLACEHOLDER && block[CHARGING_OFFSET] === 1 ? null : raw,
+    // 除 0 之外都算"插着电"；数字只认实测过的 0 和 2 这两态，看不懂的取值宁缺不假
+    charging: charge !== CHARGE_NONE,
+    level: charge === CHARGE_NONE ? null : charge === CHARGE_FULL ? 'full' : 'charging',
+    percent: charge === CHARGE_FULL || charge === CHARGE_NONE ? raw : null,
     model
   }
+}
+
+/*
+ * 第 4 位是我们自己写进去的序号，每轮加 1，它变了不代表设备说了新东西，所以比帧的时候抹掉。
+ */
+export function frameKey(block: Buffer): string {
+  return Array.from(block.subarray(0, REPORT_LENGTH), (byte, index) =>
+    index === SEQ_OFFSET ? 0 : byte
+  ).join(',')
+}
+
+let lastFrameKey = ''
+let lastFrameAt: string | null = null
+
+/*
+ * 只在帧内容真的变了才推进时间戳。插拔之后设备自己也要 20~60 秒（实测 20 / 24 / 58 秒）
+ * 才把新状态推上来，这期间每 30 秒读一次读到的都是同一帧缓存，要是照旧写"现在"，
+ * 界面就一直显示"刚刚"，把一分钟前的状态演成即时的。
+ */
+function stampFrame(block: Buffer): string {
+  const key = frameKey(block)
+  if (key !== lastFrameKey || !lastFrameAt) lastFrameAt = new Date().toISOString()
+  lastFrameKey = key
+  return lastFrameAt
 }
 
 function readInfoBlock(path: string): AulaInfoBlock | null {
@@ -113,7 +149,7 @@ function readInfoBlock(path: string): AulaInfoBlock | null {
         return null
       }
       const parsed = parseInfoBlock(report)
-      if (parsed) return parsed
+      if (parsed) return { ...parsed, at: stampFrame(report) }
       // 读得太急会拿到还没回填的缓冲；借这次带超时的读做 25ms 退避，不开异步
       device.readTimeout(25)
     }
@@ -132,6 +168,7 @@ export function measureAulaMouse(group: HidDeviceGroup): DeviceMeasurement {
     status: 'error',
     percent: null,
     charging: null,
+    chargeLevel: null,
     model: null,
     note: '接收器没有响应电量查询',
     updatedAt: null
@@ -144,16 +181,17 @@ export function measureAulaMouse(group: HidDeviceGroup): DeviceMeasurement {
   if (!parsed) return { ...idle, note: '没读到数据，鼠标可能在休眠' }
 
   if (parsed.charging) {
-    // 电量留空由 service 拿接入前那次真值补上，界面标灰显示；
-    // 这里如果直接回 100，用户会以为已经充满
+    // 正在充：percent 已经是 null，留空由 service 拿接入前那次真值补上、界面标灰；
+    // 已充满（level=full）不一样，那时 100 是当场读到的，照实显示
     return {
       link: '2.4g',
       status: 'ok',
-      percent: null,
+      percent: parsed.percent,
       charging: true,
+      chargeLevel: parsed.level,
       model: parsed.model,
-      note: '充电中，电量暂不更新',
-      updatedAt: new Date().toISOString()
+      note: parsed.percent === null ? '充电中，电量暂不更新' : null,
+      updatedAt: parsed.at
     }
   }
 
@@ -162,8 +200,9 @@ export function measureAulaMouse(group: HidDeviceGroup): DeviceMeasurement {
     status: 'ok',
     percent: parsed.percent,
     charging: false,
+    chargeLevel: null,
     model: parsed.model,
     note: null,
-    updatedAt: new Date().toISOString()
+    updatedAt: parsed.at
   }
 }

@@ -2,6 +2,8 @@
  * 主进程与渲染层共用的类型。
  * percent 为 null 表示"这一轮没有可信读数"，界面显示 --，绝不用 0 或上次的值冒充；
  * stale 是另一个维度：值还是上一次的真值，只是这一轮没刷新，界面标灰并写「上次 HH:MM」。
+ * updatedAt 记的是"设备最后一次给出不同内容"的时刻，不是"我们最后一次读通"的时刻：
+ * 鼠标插拔之后设备自己也要 20~60 秒才把新状态推上来，这期间反复读到的都是同一帧缓存。
  */
 
 export type HidKind =
@@ -73,11 +75,18 @@ export type DeviceLink = '2.4g' | 'wired' | 'unknown'
 
 export type ReadingStatus = 'ok' | 'unsupported' | 'error'
 
+/*
+ * 插着电时设备自己怎么说：'charging' 还在充（这时候电量位往往是钉死的，给不出可信数字），
+ * 'full' 已经充满。只有 charging 为 true 时才有意义，读不出这一层的设备留空，界面退回"充电中"。
+ */
+export type ChargeLevel = 'charging' | 'full'
+
 export interface DeviceMeasurement {
   link: DeviceLink
   status: ReadingStatus
   percent: number | null
   charging: boolean | null
+  chargeLevel?: ChargeLevel | null
   model: string | null
   note: string | null
   updatedAt: string | null
