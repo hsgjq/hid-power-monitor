@@ -47,11 +47,20 @@ function commandChannel(group: HidDeviceGroup): string | null {
     ?? null
 }
 
+/*
+ * 自报型号串是这一帧唯一的身份判据（parseInfoBlock 靠它拦下设备没响应的情况），
+ * 所以取值要收得紧：实测是 "M137" 这种数字加大写字母。放宽到任意可打印字符，
+ * 一小串垃圾字节就能冒充型号，界面会凭空多出一个型号、读数也一起被当成真的。
+ */
+function isModelByte(byte: number): boolean {
+  return (byte >= 0x30 && byte <= 0x39) || (byte >= 0x41 && byte <= 0x5a)
+}
+
 function readModel(block: Buffer): string | null {
   let text = ''
   for (let i = MODEL_OFFSET; i < MODEL_OFFSET + MODEL_LENGTH; i += 1) {
     const byte = block[i]
-    if (byte < 0x30 || byte > 0x7a) break
+    if (!isModelByte(byte)) break
     text += String.fromCharCode(byte)
   }
   // 少于 3 个字符就当没有：型号串实测是 4 位（M137）
@@ -75,7 +84,8 @@ export function parseInfoBlock(block: Buffer): AulaInfoBlock | null {
   if (!model) return null
 
   const raw = block[BATTERY_OFFSET]
-  if (raw < 1 || raw > 100) return null
+  // 0 是合法读数（电量真见底了），不能和"没读到"混成一堆；冒牌帧由上面的型号串拦掉
+  if (raw > 100) return null
 
   return {
     charging: block[CHARGING_OFFSET] === 1,
