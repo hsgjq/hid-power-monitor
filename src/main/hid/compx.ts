@@ -27,13 +27,14 @@ function buildReport(command: number, extra?: Uint8Array): number[] {
   return [COMPX_REPORT_ID, ...payload]
 }
 
+/*
+ * 写命令之前先把队列里剩下的输入报告倒掉。readTimeout 超时给的是空数组、不抛异常
+ * （node-hid 的 hid_read_timeout 返回 0 而不是 -1），所以读到空就该停：原来那个
+ * try/catch 里的 break 永远进不去，每次固定把 8×10ms 等满。
+ */
 function drain(device: HID): void {
   for (let i = 0; i < 8; i += 1) {
-    try {
-      device.readTimeout(10)
-    } catch {
-      break
-    }
+    if (device.readTimeout(10).length === 0) return
   }
 }
 
@@ -103,7 +104,7 @@ export function probeCompx(path: string): CompxProbeResult {
       responses.push(`cmd4=${hex(batteryResponse) ?? 'null'}`)
       if (batteryResponse && batteryResponse.length > 8) {
         const value = batteryResponse[6]
-        if (value >= 0 && value <= 100) {
+        if (value <= 100) {
           batteryPercent = value
           charging = batteryResponse[7] === 1
         }
