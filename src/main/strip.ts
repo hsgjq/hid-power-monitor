@@ -22,7 +22,8 @@ const MOVE_SAVE_DEBOUNCE_MS = 400
 let strip: BrowserWindow | null = null
 let saveTimer: NodeJS.Timeout | null = null
 let dragOffset: StripPosition | null = null
-let applyingBounds = false
+// 自己刚把窗口摆到位的那个标记，见 setStripBounds 里的说明
+let boundsWrittenByUs = false
 
 function loadStripContent(win: BrowserWindow): void {
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -48,9 +49,14 @@ function clampToArea(x: number, y: number, width: number, height: number): Strip
 function setStripBounds(x: number, y: number, width: number, height: number): void {
   if (!strip || strip.isDestroyed()) return
   const clamped = clampToArea(x, y, width, height)
-  applyingBounds = true
+  /*
+   * 这个标记只拦得住 moved 同步派下来的那一路：Windows 上它常常要到下一拍才发，
+   * 那时标记已经复位了。真正防止"夹坐标→再摆窗→再夹"打转的是 moved 处理里那句
+   * 夹完和原坐标一样就不再写，所以别把这个标记当递归锁用。
+   */
+  boundsWrittenByUs = true
   strip.setBounds({ ...clamped, width, height }, false)
-  applyingBounds = false
+  boundsWrittenByUs = false
 }
 
 function persistPosition(): void {
@@ -141,7 +147,7 @@ export function syncStrip(options: SyncOptions): void {
     strip.setAlwaysOnTop(true, 'screen-saver')
 
     strip.on('moved', () => {
-      if (applyingBounds) return
+      if (boundsWrittenByUs) return
       const bounds = strip?.getBounds()
       if (!bounds || !strip) return
       const clamped = clampToArea(bounds.x, bounds.y, bounds.width, bounds.height)
