@@ -1,6 +1,6 @@
 {
   "name": "hid-power-monitor",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Windows tray utility for 2.4G wireless mouse and keyboard battery levels",
   "author": "hsgjq",
