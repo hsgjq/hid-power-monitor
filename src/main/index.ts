@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, ipcMain, powerMonitor, screen } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, powerMonitor, screen } from 'electron'
 import { createFlyoutWindow, resizeFlyout, showFlyout } from './flyout'
 import { buildDiagnostics } from './hid/diagnostics'
 import {
@@ -135,6 +135,14 @@ app.whenReady().then(() => {
   // 启动时什么都不弹：面板只由点托盘图标或点通知唤起。开了浮条的话上面
   // applyStrip 已经把浮条显示出来了，那就是启动后唯一可见的东西
   startPolling()
+}).catch((error) => {
+  // 这一步炸了就没有托盘也没有浮条。托盘应用"自己没了动静"是最难查的形态，
+  // 所以当场把原因弹出来再退，不丢进没人看的 stderr
+  dialog.showErrorBox(
+    'HID 电量托盘启动失败',
+    error instanceof Error ? error.stack ?? error.message : String(error)
+  )
+  app.quit()
 })
 
 // 再开一个实例（双击桌面图标）意图是"把应用叫出来"，不是把它收掉
